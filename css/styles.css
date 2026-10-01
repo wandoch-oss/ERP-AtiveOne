@@ -98,8 +98,8 @@ tfoot td{border-top:1px solid var(--border);font-weight:600;color:var(--text)}
 
 .btn{background:var(--brand);color:#fff;border:none;padding:7px 13px;border-radius:8px;font-size:12.5px;
   font-weight:600;cursor:pointer}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn{color:#0d1a16}}
-:root[data-theme="dark"] .btn{color:#0d1a16}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn:not(.sec):not(.dgr){color:#0d1a16}}
+:root[data-theme="dark"] .btn:not(.sec):not(.dgr){color:#0d1a16}
 .btn.sec{background:var(--panel-2);color:var(--text);border:1px solid var(--border)}
 .btn.dgr{background:var(--red-soft);color:var(--red);border:1px solid var(--border)}
 .btn.sm{padding:4px 9px;font-size:11.5px}
