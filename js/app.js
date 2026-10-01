@@ -272,6 +272,19 @@ const rotComissao=r=>r.comissao_tipo==='Percentual'?num(r.comissao_valor,2)+'%':
 const CATEGORIAS_SERVICO_PADRAO=['Instalação','Manutenção','Programação e comissionamento','Projeto e consultoria','Suporte técnico','Treinamento'];
 function proxCodigoServ(){let n=S.servicos.length+1;const ex=new Set(S.servicos.map(x=>String(x.codigo||'').toLowerCase()));
   while(ex.has('srv-'+String(n).padStart(3,'0')))n++;return 'SRV-'+String(n).padStart(3,'0')}
+function cpfValido(v){
+  const c=String(v||'').replace(/\D/g,'');if(c.length!==11||/^(\d)\1+$/.test(c))return false;
+  const dv=n=>{let t=0;for(let i=0;i<n;i++)t+=Number(c[i])*(n+1-i);const r=(t*10)%11;return r===10?0:r};
+  return dv(9)===Number(c[9])&&dv(10)===Number(c[10]);
+}
+function validarColab(d){
+  if(!cpfValido(d.cpf))return 'CPF inválido. Confira os 11 dígitos.';
+  d.cpf=fmtCPF(d.cpf);
+  const dig=d.cpf.replace(/\D/g,'');
+  const dup=S.colaboradores.find(x=>x.id!==d.id&&String(x.cpf||'').replace(/\D/g,'')===dig);
+  if(dup)return 'Já existe pessoa com esse CPF: '+dup.nome+'.';
+  return '';
+}
 function validarServico(d){
   d.codigo=String(d.codigo||'').trim();
   let l=soDig(d.cod_lc116);
@@ -353,9 +366,10 @@ const SCH={
    {k:'categoria_dre',l:'Categoria do lançamento (apoio)',t:'select',opts:['Serviço','Material','Contrato','Mão de obra','Terceiros','Marketing','Administrativo','Impostos','Outros']},
    {t:'vazio'},{k:'descricao',l:'Descrição',full:1}]},
  categorias_servico:{t:'Categoria de serviço',fem:1,cancelavel:1,f:[{k:'nome',l:'Nome',req:1},{k:'descricao',l:'Descrição'}]},
- colaboradores:{t:'Colaborador',cancelavel:1,f:[
+ colaboradores:{t:'Colaborador',cancelavel:1,validar:d=>validarColab(d),f:[
    {t:'secao',l:'Identificação'},
-   {k:'nome',l:'Nome',req:1},{k:'tipo',l:'Tipo',t:'select',opts:TIPOS_COLAB,req:1},
+   {k:'nome',l:'Nome',req:1},{k:'cpf',l:'CPF',req:1},
+   {k:'tipo',l:'Tipo',t:'select',opts:TIPOS_COLAB,req:1},{t:'vazio'},
    {k:'funcao',l:'Função / cargo'},{k:'telefone',l:'Telefone / WhatsApp'},{k:'email',l:'E-mail',full:1},
    {k:'vinculo',l:'Vínculo',t:'select',opts:['Próprio','Terceirizado']},{k:'fornecedor',l:'Fornecedor / empresa (se terceirizado)',t:'ref',col:'fornecedores'},
    {t:'secao',l:'Custo e capacidade'},
@@ -2963,7 +2977,7 @@ R.cadastros=v=>{
       {l:'Natureza',k:'natureza'},
       {l:'Contas gerenciais',n:1,f:r=>r.natureza==='Analítica'?S.plano_gerencial.filter(g=>g.conta_contabil===r.id).length:'—'},
       {l:'Status',f:r=>'<span class="bg '+(ativo(r)?'g-green':'g-red')+'">'+(ativo(r)?'Ativa':'Cancelada')+'</span>'}],
-    colaboradores:[{l:'Nome',k:'nome',s:1},{l:'Tipo',f:r=>r.tipo?'<span class="bg '+(r.tipo==='Técnico'?'g-brand':r.tipo==='Vendedor'?'g-accent':'g-gray')+'">'+esc(r.tipo)+'</span>':'<span style="color:var(--faint)">definir</span>'},
+    colaboradores:[{l:'Nome',k:'nome',s:1},{l:'CPF',f:r=>r.cpf?esc(r.cpf):'<span class="bg g-amber">informar</span>'},{l:'Tipo',f:r=>r.tipo?'<span class="bg '+(r.tipo==='Técnico'?'g-brand':r.tipo==='Vendedor'?'g-accent':'g-gray')+'">'+esc(r.tipo)+'</span>':'<span style="color:var(--faint)">definir</span>'},
       {l:'Função',k:'funcao'},{l:'Vínculo',f:r=>r.vinculo==='Terceirizado'?'<span class="bg g-amber">Terceirizado</span>'+(r.fornecedor?'<div style="font-size:11px;color:var(--faint)">'+esc(nm('fornecedores',r.fornecedor))+'</div>':''):'<span class="bg g-gray">Próprio</span>'},
       {l:'Contato',f:r=>esc([r.telefone,r.email].filter(Boolean).join(' · ')||'—')},
       {l:'Custo/hora',n:1,f:r=>money(r.custo_hora)},{l:'Horas/semana',n:1,k:'capacidade'},
