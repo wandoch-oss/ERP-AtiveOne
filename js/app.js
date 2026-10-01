@@ -1,7 +1,7 @@
 /* ---------- estado e persistência ---------- */
 const COLS=['clientes','oportunidades','orcamentos','obras','os','agenda','contratos','apontamentos',
 'produtos','servicos','categorias_servico','locais','estoque','compras','fornecedores','financeiro','nfe','campanhas',
-'concorrentes','contas_bancarias','extrato','colaboradores','ajustes','reservas','aditivos','familias','categorias','vendas','canais','empresas','centros_lucro','centros_custo'];
+'concorrentes','contas_bancarias','extrato','colaboradores','parceiros','ajustes','reservas','aditivos','familias','categorias','vendas','canais','empresas','centros_lucro','centros_custo'];
 const S={}; COLS.forEach(c=>S[c]=[]);
 let DB=null, DL=null, FB=null, ASSETS=null, MODE='local', pend={};
 
@@ -254,6 +254,20 @@ function wireTable(el,col,opts){
   if(opts.onRow)el.querySelectorAll('tr.clk').forEach(t=>t.onclick=()=>opts.onRow(t.dataset.id));
 }
 /* ---------- esquemas ---------- */
+const TIPOS_COLAB=['Técnico','Vendedor','Administrativo','Outro'];
+const TIPOS_COMISSAO=['Sem comissão','Percentual','Valor fixo'];
+const TIPOS_PARCEIRO=['Arquiteto','Designer de interiores','Engenheiro','Construtora','Integrador','Indicador','Outro'];
+const ehTecnico=c=>ativo(c)&&(!c.tipo||c.tipo==='Técnico');
+const ehVendedor=c=>ativo(c)&&(!c.tipo||c.tipo==='Vendedor');
+const vendasValidas=()=>S.vendas.filter(v=>v.status!=='Cancelada');
+function comissaoDe(r,vendas){
+  const base=vendas.reduce((a,v)=>a+Number(v.valor||0),0),val=Number(r.comissao_valor||0);
+  const c=r.comissao_tipo==='Percentual'?base*val/100:r.comissao_tipo==='Valor fixo'?vendas.length*val:0;
+  return{n:vendas.length,base:base,comissao:c};
+}
+const vendasDoVendedor=id=>vendasValidas().filter(v=>v.vendedor===id);
+const vendasDoParceiro=id=>vendasValidas().filter(v=>{const o=byId('oportunidades',v.oportunidade);return o&&o.parceiro===id});
+const rotComissao=r=>r.comissao_tipo==='Percentual'?num(r.comissao_valor,2)+'%':r.comissao_tipo==='Valor fixo'?money(r.comissao_valor)+' por venda':'—';
 const CATEGORIAS_SERVICO_PADRAO=['Instalação','Manutenção','Programação e comissionamento','Projeto e consultoria','Suporte técnico','Treinamento'];
 function proxCodigoServ(){let n=S.servicos.length+1;const ex=new Set(S.servicos.map(x=>String(x.codigo||'').toLowerCase()));
   while(ex.has('srv-'+String(n).padStart(3,'0')))n++;return 'SRV-'+String(n).padStart(3,'0')}
@@ -324,9 +338,26 @@ const SCH={
    {k:'gera_os',l:'Gera ordem de serviço',t:'select',opts:['Sim','Não']},{k:'tipo_os',l:'Tipo de OS padrão',t:'select',opts:['Instalação','Manutenção preventiva','Corretiva','Garantia','Visita técnica','Treinamento']},
    {k:'equipe',l:'Técnicos necessários',t:'number',step:'1'},{k:'funcao_exigida',l:'Função / perfil exigido'}]},
  categorias_servico:{t:'Categoria de serviço',fem:1,cancelavel:1,f:[{k:'nome',l:'Nome',req:1},{k:'descricao',l:'Descrição'}]},
- colaboradores:{t:'Colaborador',f:[
-   {k:'nome',l:'Nome',req:1},{k:'funcao',l:'Função'},
-   {k:'custo_hora',l:'Custo/hora (R$)',t:'money'},{k:'capacidade',l:'Horas/semana',t:'number',step:'1'}]},
+ colaboradores:{t:'Colaborador',cancelavel:1,f:[
+   {t:'secao',l:'Identificação'},
+   {k:'nome',l:'Nome',req:1},{k:'tipo',l:'Tipo',t:'select',opts:TIPOS_COLAB,req:1},
+   {k:'funcao',l:'Função / cargo'},{k:'telefone',l:'Telefone / WhatsApp'},{k:'email',l:'E-mail',full:1},
+   {t:'secao',l:'Custo e capacidade'},
+   {k:'custo_hora',l:'Custo/hora (R$)',t:'money'},{k:'capacidade',l:'Horas/semana',t:'number',step:'1'},
+   {t:'secao',l:'Comissão',nota:'Calculada sobre as vendas em que a pessoa consta como vendedora.'},
+   {k:'comissao_tipo',l:'Tipo de comissão',t:'select',opts:TIPOS_COMISSAO},{k:'comissao_valor',l:'Valor (% ou R$ por venda)',t:'number',step:'0.01'},
+   {k:'obs',l:'Observações',t:'textarea'}]},
+ parceiros:{t:'Parceiro',cancelavel:1,f:[
+   {t:'secao',l:'Identificação'},
+   {k:'nome',l:'Nome',req:1},{k:'tipo',l:'Tipo',t:'select',opts:TIPOS_PARCEIRO,req:1},
+   {k:'empresa_nome',l:'Escritório / empresa'},{k:'documento',l:'CPF / CNPJ'},
+   {k:'cidade',l:'Cidade / região'},{t:'vazio'},
+   {t:'secao',l:'Contato e presença digital'},
+   {k:'contato',l:'Pessoa de contato'},{k:'telefone',l:'Telefone / WhatsApp'},
+   {k:'email',l:'E-mail'},{k:'site',l:'Site'},{k:'instagram',l:'Instagram'},{k:'linkedin',l:'LinkedIn'},
+   {t:'secao',l:'Comissão ou bonificação por indicação',nota:'Calculada sobre as vendas das oportunidades indicadas por este parceiro.'},
+   {k:'comissao_tipo',l:'Tipo de comissão',t:'select',opts:TIPOS_COMISSAO},{k:'comissao_valor',l:'Valor (% ou R$ por venda)',t:'number',step:'0.01'},
+   {k:'obs',l:'Observações',t:'textarea'}]},
  locais:{t:'Local de estoque',f:[
    {k:'nome',l:'Nome',req:1},
    {k:'tipo',l:'Tipo',t:'select',opts:['Almoxarifado','Técnico','Obra','Trânsito'],req:1},campoUnid,
@@ -337,7 +368,8 @@ const SCH={
    {k:'estagio',l:'Estágio',t:'select',opts:['Lead','Visita técnica','Proposta','Negociação','Ganho','Perdido'],req:1},
    {k:'valor',l:'Valor estimado (R$)',t:'money'},
    {k:'canal',l:'Canal de relacionamento',t:'ref',col:'canais',filtro:r=>ativo(r),rotulo:r=>canalRot(r)},
-   {k:'campanha',l:'Campanha',t:'ref',col:'campanhas'},{k:'responsavel',l:'Responsável',t:'ref',col:'colaboradores'},
+   {k:'campanha',l:'Campanha',t:'ref',col:'campanhas'},{k:'responsavel',l:'Responsável (vendedor)',t:'ref',col:'colaboradores',filtro:ehVendedor},
+   {k:'parceiro',l:'Parceiro / indicação',t:'ref',col:'parceiros',filtro:r=>ativo(r),rotulo:r=>r.nome+(r.tipo?' · '+r.tipo:'')},
    {k:'proxima_acao',l:'Próxima ação'},{k:'data_prevista',l:'Fechamento previsto',t:'date'},
    {k:'motivo_perda',l:'Motivo da perda (se perdida)',t:'select',opts:MOTIVOS_PERDA}]},
  contratos:{t:'Contrato de manutenção',f:[
@@ -373,7 +405,7 @@ const SCH={
    {k:'tipo',l:'Tipo',t:'select',opts:['Instalação','Manutenção preventiva','Corretiva','Garantia','Visita técnica','Treinamento'],req:1},
    {k:'cobranca',l:'Cobrança',t:'select',opts:COBR_OS,req:1},{k:'valor',l:'Valor a cobrar (R$) — se sob demanda',t:'money'},
    {k:'descricao',l:'Descrição',req:1,full:1},
-   {k:'tecnico',l:'Técnico',t:'ref',col:'colaboradores'},{k:'data',l:'Data',t:'date',req:1},
+   {k:'tecnico',l:'Técnico',t:'ref',col:'colaboradores',filtro:ehTecnico},{k:'data',l:'Data',t:'date',req:1},
    {k:'hora',l:'Hora'},{k:'duracao',l:'Duração prevista (h)',t:'number',step:'0.5'},
    {k:'prioridade',l:'Prioridade',t:'select',opts:['Baixa','Média','Alta']},
    {k:'status',l:'Status',t:'select',opts:['Agendada','Em execução','Concluída','Cancelada'],req:1},campoUnid,
@@ -476,8 +508,8 @@ function editRec(col,id,after,preset){
   if(c)c.onclick=async()=>{
     if(ativo(rec)){
       const cen=col.startsWith('centros_'),kc=col==='centros_lucro'?'centro_lucro':'centro_custo';
-      const uso=col==='canais'?S.oportunidades.filter(o=>o.canal===id).length:cen?S.obras.filter(o=>o[kc]===id).length:col==='servicos'?S.orcamentos.filter(o=>(o.itens||[]).some(i=>i.ref===id)).length:col==='categorias_servico'?S.servicos.filter(x=>x.categoria===id).length:S.produtos.filter(p=>p.familia===id||p.categoria===id).length;
-      if(!await ask('Cancelar "'+rec.nome+'"?'+(uso?' '+uso+(col==='canais'?' oportunidade(s)':cen?' projeto(s)':col==='servicos'?' orçamento(s)':col==='categorias_servico'?' serviço(s)':' produto(s)')+' usam este registro e continuam com ele, mas ele deixa de aparecer em novos cadastros.':'')))return;
+      const uso=col==='canais'?S.oportunidades.filter(o=>o.canal===id).length:cen?S.obras.filter(o=>o[kc]===id).length:col==='servicos'?S.orcamentos.filter(o=>(o.itens||[]).some(i=>i.ref===id)).length:col==='categorias_servico'?S.servicos.filter(x=>x.categoria===id).length:col==='colaboradores'?S.os.filter(x=>x.tecnico===id).length+S.oportunidades.filter(x=>x.responsavel===id).length+vendasDoVendedor(id).length:col==='parceiros'?S.oportunidades.filter(x=>x.parceiro===id).length:S.produtos.filter(p=>p.familia===id||p.categoria===id).length;
+      if(!await ask('Cancelar "'+rec.nome+'"?'+(uso?' '+uso+(col==='canais'?' oportunidade(s)':cen?' projeto(s)':col==='servicos'?' orçamento(s)':col==='categorias_servico'?' serviço(s)':(col==='colaboradores'||col==='parceiros')?' registro(s)':' produto(s)')+' usam este registro e continuam com ele, mas ele deixa de aparecer em novos cadastros.':'')))return;
       rec.status='Cancelada';
     }else rec.status='Ativa';
     put(col,rec);toast(rec.status==='Ativa'?'Reativado':'Cancelado');fim();
@@ -945,7 +977,7 @@ function registrarVenda(orcId){
     let h='<div class="kpis" style="margin-bottom:12px">'+kpi('Orçamento '+o.numero,money(t.venda))+kpi('Valor fechado',money(valor))+
       kpi('Margem final','<span style="color:'+(m<30?'var(--red)':'inherit')+'">'+pct(m)+'</span>')+kpi('Cliente',esc(c.nome||'—'))+'</div>';
     h+='<div class="fsec">Negociação</div><div class="frow">'+inp('data','Data da venda','date')+
-      sel('vendedor','Vendedor',[{v:'',l:'—'}].concat(S.colaboradores.map(x=>({v:x.id,l:x.nome}))))+'</div>'+
+      sel('vendedor','Vendedor',[{v:'',l:'—'}].concat(S.colaboradores.filter(x=>ehVendedor(x)||x.id===st.vendedor).map(x=>({v:x.id,l:x.nome}))))+'</div>'+
       (S.empresas.length?'<div class="frow">'+sel('empresa','Unidade que vendeu',S.empresas.filter(e=>ativo(e)).map(e=>({v:e.id,l:(e.nome_fantasia||e.razao_social)+' · '+e.tipo})))+'<div></div></div>':'')+
       '<div class="frow">'+inp('desconto','Desconto negociado (R$)','number',' step="0.01"')+
       sel('entrega','Tipo de venda',[{v:'Obra',l:'Projeto com execução (abre projeto)'},{v:'Produtos',l:'Somente produtos (baixa do estoque)'}])+'</div>';
@@ -1252,7 +1284,7 @@ function concluirEtapa(o,nome,after){
   after();
 }
 function apontarHoras(o,after){
-  const f=[{k:'colaborador',l:'Colaborador',t:'ref',col:'colaboradores',req:1},
+  const f=[{k:'colaborador',l:'Colaborador',t:'ref',col:'colaboradores',req:1,filtro:r=>ativo(r)},
     {k:'data',l:'Data',t:'date',req:1},{k:'horas',l:'Horas',t:'number',step:'0.5',req:1},
     {k:'etapa',l:'Etapa',t:'select',opts:(o.etapas||[]).map(e=>e.nome)},{k:'obs',l:'Observação'}];
   openM('Apontar horas · '+o.codigo,formHtml(f,{data:hoje()}),'Lançar',d=>{
@@ -1574,7 +1606,7 @@ R.agenda=v=>{
     }
     document.getElementById('cal').innerHTML=h;
     document.getElementById('cal').querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>editRec(b.dataset.col,b.dataset.id));
-    const cap=S.colaboradores.map(c=>{
+    const cap=S.colaboradores.filter(c=>ehTecnico(c)).map(c=>{
       const hs=U('os').filter(o=>o.tecnico===c.id&&mesDe(o.data)===calRef).reduce((a,o)=>a+Number(o.duracao||0),0);
       const disp=Number(c.capacidade||40)*4.3;
       return{id:c.id,nome:c.nome,funcao:c.funcao,hs:hs,disp:disp,u:disp?hs/disp*100:0};
@@ -2771,16 +2803,16 @@ function editarEmpresa(id,after,aba){
 let cadTab='empresas';
 R.cadastros=v=>{
   const abas=[['empresas','Empresas'],['centros_lucro','Centros de lucro'],['centros_custo','Centros de custo'],['produtos','Produtos'],['familias','Famílias'],['categorias','Categorias'],['servicos','Serviços'],['categorias_servico','Categorias de serviço'],
-    ['colaboradores','Equipe'],['locais','Locais de estoque'],['fornecedores','Fornecedores']];
+    ['colaboradores','Equipe'],['parceiros','Parceiros'],['locais','Locais de estoque'],['fornecedores','Fornecedores']];
   const rotNovo={empresas:'+ Nova empresa',centros_lucro:'+ Novo centro de lucro',centros_custo:'+ Novo centro de custo',produtos:'+ Novo produto',familias:'+ Nova família',categorias:'+ Nova categoria',servicos:'+ Novo serviço',categorias_servico:'+ Nova categoria de serviço',
-    colaboradores:'+ Novo colaborador',locais:'+ Novo local',fornecedores:'+ Novo fornecedor'};
+    colaboradores:'+ Novo colaborador',parceiros:'+ Novo parceiro',locais:'+ Novo local',fornecedores:'+ Novo fornecedor'};
   v.innerHTML='<div class="tabs">'+abas.map(a=>'<button class="tab'+(cadTab===a[0]?' on':'')+'" data-tab="'+a[0]+'">'+a[1]+'</button>').join('')+'</div>'+
     '<div class="toolbar"><button class="btn" id="nv">'+rotNovo[cadTab]+'</button>'+
     (cadTab==='produtos'?'<select id="fTp"><option value="">Simples e kits</option><option>Simples</option><option>Kit</option></select>'+
       '<select id="fFm"><option value="">Todas as famílias</option>'+S.familias.map(f=>'<option value="'+f.id+'">'+esc(f.nome)+'</option>').join('')+'</select>'+
       '<input type="text" id="fBu" placeholder="Buscar SKU ou descrição…">':'')+
     ((['familias','categorias','centros_lucro','centros_custo','categorias_servico'].includes(cadTab))?'<button class="btn sec sm" id="padrao">Carregar lista padrão</button>':'')+
-    ((['empresas','centros_lucro','centros_custo','produtos','familias','categorias','servicos','categorias_servico'].includes(cadTab))?'<label style="font-size:12.5px;color:var(--dim);display:flex;gap:6px;align-items:center">'+
+    ((['empresas','centros_lucro','centros_custo','produtos','familias','categorias','servicos','categorias_servico','colaboradores','parceiros'].includes(cadTab))?'<label style="font-size:12.5px;color:var(--dim);display:flex;gap:6px;align-items:center">'+
       '<input type="checkbox" id="fCa"'+(verCancelados?' checked':'')+'> mostrar cancelados</label>':'')+'</div>'+
     '<div class="card"><div class="cbody" id="lst"></div></div>'+
     '<div class="card"><div class="chead"><h2>Dados</h2></div><div class="cbody">'+
@@ -2855,8 +2887,21 @@ R.cadastros=v=>{
     categorias_servico:[{l:'Categoria',k:'nome',s:1},{l:'Descrição',k:'descricao'},
       {l:'Serviços',n:1,f:r=>S.servicos.filter(x=>x.categoria===r.id).length},
       {l:'Status',f:r=>'<span class="bg '+(ativo(r)?'g-green':'g-red')+'">'+(ativo(r)?'Ativa':'Cancelada')+'</span>'}],
-    colaboradores:[{l:'Nome',k:'nome',s:1},{l:'Função',k:'funcao'},{l:'Custo/hora',n:1,f:r=>money(r.custo_hora)},
-      {l:'Horas/semana',n:1,k:'capacidade'},{l:'Horas lançadas',n:1,f:r=>num(S.apontamentos.filter(a=>a.colaborador===r.id).reduce((a,x)=>a+Number(x.horas||0),0),1)}],
+    colaboradores:[{l:'Nome',k:'nome',s:1},{l:'Tipo',f:r=>r.tipo?'<span class="bg '+(r.tipo==='Técnico'?'g-brand':r.tipo==='Vendedor'?'g-accent':'g-gray')+'">'+esc(r.tipo)+'</span>':'<span style="color:var(--faint)">definir</span>'},
+      {l:'Função',k:'funcao'},{l:'Contato',f:r=>esc([r.telefone,r.email].filter(Boolean).join(' · ')||'—')},
+      {l:'Custo/hora',n:1,f:r=>money(r.custo_hora)},{l:'Horas/semana',n:1,k:'capacidade'},
+      {l:'Horas lançadas',n:1,f:r=>num(S.apontamentos.filter(a=>a.colaborador===r.id).reduce((a,x)=>a+Number(x.horas||0),0),1)},
+      {l:'Comissão',f:r=>esc(rotComissao(r))},
+      {l:'Vendas',n:1,f:r=>{const c=comissaoDe(r,vendasDoVendedor(r.id));return c.n?c.n+' · '+money(c.base):'—'}},
+      {l:'Comissão estimada',n:1,f:r=>{const c=comissaoDe(r,vendasDoVendedor(r.id));return c.comissao?money(c.comissao):'—'}},
+      {l:'Status',f:r=>'<span class="bg '+(ativo(r)?'g-green':'g-red')+'">'+(ativo(r)?'Ativo':'Cancelado')+'</span>'}],
+    parceiros:[{l:'Nome',k:'nome',s:1},{l:'Tipo',f:r=>'<span class="bg g-purple">'+esc(r.tipo||'—')+'</span>'},
+      {l:'Escritório / empresa',k:'empresa_nome'},{l:'Contato',f:r=>esc([r.contato,r.telefone].filter(Boolean).join(' · ')||'—')},
+      {l:'Comissão',f:r=>esc(rotComissao(r))},
+      {l:'Indicações',n:1,f:r=>S.oportunidades.filter(o=>o.parceiro===r.id).length},
+      {l:'Vendas',n:1,f:r=>{const c=comissaoDe(r,vendasDoParceiro(r.id));return c.n?c.n+' · '+money(c.base):'—'}},
+      {l:'Comissão estimada',n:1,f:r=>{const c=comissaoDe(r,vendasDoParceiro(r.id));return c.comissao?money(c.comissao):'—'}},
+      {l:'Status',f:r=>'<span class="bg '+(ativo(r)?'g-green':'g-red')+'">'+(ativo(r)?'Ativo':'Cancelado')+'</span>'}],
     locais:[{l:'Local',k:'nome',s:1},{l:'Tipo',f:r=>'<span class="bg g-accent">'+esc(r.tipo)+'</span>'},
       {l:'Responsável',f:r=>esc(nm('colaboradores',r.responsavel))},
       {l:'Itens em posse',n:1,f:r=>S.produtos.filter(p=>Math.abs(saldoProdLocal(p.id,r.id))>0.001).length}],
@@ -2865,7 +2910,7 @@ R.cadastros=v=>{
   };
   const desenhar=()=>{
     let rows=S[cadTab].slice();
-    if(['empresas','centros_lucro','centros_custo','produtos','familias','categorias','servicos','categorias_servico'].includes(cadTab)){
+    if(['empresas','centros_lucro','centros_custo','produtos','familias','categorias','servicos','categorias_servico','colaboradores','parceiros'].includes(cadTab)){
       if(!verCancelados)rows=rows.filter(ativo);
       rows.sort((a,b)=>(ativo(b)-ativo(a))||String(a.nome).localeCompare(String(b.nome)));
     }
