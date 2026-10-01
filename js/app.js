@@ -1172,11 +1172,12 @@ async function cancelarVenda(v){
 
 /* ---------- obras ---------- */
 R.obras=v=>{
-  v.innerHTML='<div class="toolbar"><select id="fs"><option value="">Todos os status</option>'+
+  v.innerHTML='<div class="toolbar"><button class="btn" id="np">+ Novo projeto</button><select id="fs"><option value="">Todos os status</option>'+
     ['Em execução','Concluída','Pausada','Cancelada'].map(x=>'<option>'+x+'</option>').join('')+'</select>'+
     '<select id="fv"><option value="">Todas as verticais</option>'+VERTICAIS.map(x=>'<option>'+x+'</option>').join('')+'</select>'+
     '<select id="fc"><option value="">Todos os centros de lucro</option>'+S.centros_lucro.map(c=>'<option value="'+c.id+'">'+esc(rotCentro(c))+'</option>').join('')+'</select></div>'+
     '<div class="kpis" id="kp"></div><div class="card"><div class="cbody" id="lst"></div></div>';
+  document.getElementById('np').onclick=()=>novoProjeto();
   const draw=()=>{
     const fs=document.getElementById('fs').value,fv=document.getElementById('fv').value;
     const fc=document.getElementById('fc').value;
@@ -1295,6 +1296,15 @@ function abrirObra(oid){
   };
   draw();
 }
+function novoProjeto(){
+  const o={codigo:'PRJ-'+String(S.obras.length+1).padStart(4,'0'),empresa:UNID||empresaPadrao(),vertical:'Residencial',status:'Em execução',
+    inicio:hoje(),fim_prev:addDias(hoje(),45),cobranca:'parcelas',avulso:true,valor:0,orcado_material:0,orcado_mo:0,
+    etapas:[{nome:'Projeto executivo',pct:15,status:'Pendente'},{nome:'Compra de material',pct:0,status:'Pendente'},
+      {nome:'Infra e cabeamento',pct:30,status:'Pendente'},{nome:'Instalação de módulos',pct:25,status:'Pendente'},
+      {nome:'Programação',pct:15,status:'Pendente'},{nome:'Comissionamento e entrega',pct:15,status:'Pendente'}]};
+  while(S.obras.some(x=>x.codigo===o.codigo))o.codigo='PRJ-'+String(Number(o.codigo.slice(4))+1).padStart(4,'0');
+  editarObra(o,()=>render());
+}
 function editarObra(o,after){
   const f=[{k:'codigo',l:'Código',req:1},{k:'titulo',l:'Escopo'},{k:'cliente',l:'Cliente',t:'ref',col:'clientes'},campoUnid,
     Object.assign({},campoCL,{req:1}),Object.assign({},campoCC,{req:1}),
@@ -1302,7 +1312,10 @@ function editarObra(o,after){
     {k:'orcado_material',l:'Material orçado (R$)',t:'money'},{k:'orcado_mo',l:'Mão de obra orçada (R$)',t:'money'},
     {k:'inicio',l:'Início',t:'date'},{k:'fim_prev',l:'Fim previsto',t:'date'},
     {k:'status',l:'Status',t:'select',opts:['Em execução','Pausada','Concluída','Cancelada']}];
-  openM('Editar projeto',formHtml(f,Object.assign({empresa:empDe('obras',o),centro_lucro:centroDe('lucro','obras',o),centro_custo:centroDe('custo','obras',o)},o)),'Salvar',d=>{Object.assign(o,d);put('obras',o);closeM();after()});
+  openM('Editar projeto',formHtml(f,Object.assign({empresa:empDe('obras',o),centro_lucro:centroDe('lucro','obras',o),centro_custo:centroDe('custo','obras',o)},o)),'Salvar',d=>{
+    if(!o.id&&!d.cliente){toast('Escolha o cliente do projeto');return}
+    if(S.obras.some(x=>x.id!==o.id&&String(x.codigo).toLowerCase()===String(d.codigo).trim().toLowerCase())){toast('Já existe projeto com esse código');return}
+    Object.assign(o,d);put('obras',o);closeM();after()});
 }
 function concluirEtapa(o,nome,after){
   const e=(o.etapas||[]).find(x=>x.nome===nome);if(!e)return;
@@ -1663,8 +1676,10 @@ function telaContratosVenda(v){
     kpi('Aguardando assinatura',ag.length,ag.length?money(ag.reduce((a,c)=>a+Number(c.valor||0),0)):'')+
     kpi('Assinados em execução',ass.length,money(ass.reduce((a,c)=>a+Number(c.valor||0),0)))+
     kpi('Concluídos',CV.filter(c=>c.status==='Concluído').length)+'</div>'+
-    '<div class="note" style="margin:-4px 0 12px">Os contratos de venda nascem sozinhos quando uma venda é registrada. Abra um contrato para baixar o documento, registrar a assinatura e anexar a via assinada.</div>'+
+    '<div class="toolbar"><button class="btn" id="ncv">+ Novo contrato de venda</button></div>'+
+    '<div class="note" style="margin:-4px 0 12px">Os contratos de venda nascem sozinhos quando uma venda é registrada. Use o botão acima para um contrato avulso, sem orçamento nem venda. Abra um contrato para baixar o documento, registrar a assinatura e anexar a via assinada.</div>'+
     '<div class="card"><div class="cbody" id="lst"></div></div>');
+  document.getElementById('ncv').onclick=()=>novoContratoVenda();
   const el=document.getElementById('lst');
   el.innerHTML=tbl([{l:'Nº',k:'numero',s:1},{l:'Cliente',f:r=>esc(nm('clientes',r.cliente))}].concat(colUnid('contratos'),[
     {l:'Venda',f:r=>esc(nm('vendas',r.venda,'numero'))+(r.obra?' · '+esc(nm('obras',r.obra,'codigo')):'')},
@@ -1674,6 +1689,23 @@ function telaContratosVenda(v){
     {l:'Status',f:r=>'<span class="bg '+bgCtr(r.status)+'">'+esc(r.status)+'</span>'}]),
     CV.slice().sort((a,b)=>String(b.data_venda).localeCompare(String(a.data_venda))),{onRow:abrirContratoVenda,empty:'Nenhum contrato de venda ainda. Eles surgem ao registrar vendas.'});
   wireTable(el,'contratos',{onRow:abrirContratoVenda});
+}
+function novoContratoVenda(){
+  const f=[{k:'cliente',l:'Cliente',t:'ref',col:'clientes',req:1},campoUnid,
+    {k:'obra',l:'Projeto vinculado (opcional)',t:'ref',col:'obras',lab:'codigo'},{k:'valor',l:'Valor do contrato (R$)',t:'money',req:1},
+    {k:'objeto',l:'Objeto do contrato',req:1,full:1},
+    {k:'prazo_dias',l:'Prazo de execução (dias)',t:'number',step:'1'},{k:'garantia_meses',l:'Garantia (meses)',t:'number',step:'1'},
+    {k:'forma',l:'Forma de pagamento'},{k:'foro',l:'Foro (cidade/UF)'},campoCL,{k:'data_venda',l:'Data do contrato',t:'date'},
+    {k:'clausulas',l:'Cláusulas adicionais',t:'textarea'}];
+  openM('Novo contrato de venda',formHtml(f,{empresa:UNID||empresaPadrao(),prazo_dias:45,garantia_meses:12,data_venda:hoje()}),'Criar contrato',d=>{
+    let n=S.contratos.filter(ehCtrVenda).length+1,numero;
+    do{numero='CT-'+String(n++).padStart(4,'0')}while(S.contratos.some(x=>x.numero===numero));
+    const c=put('contratos',{tipo:'Cliente',subtipo:'Venda',numero:numero,cliente:d.cliente,empresa:d.empresa||empresaPadrao(),venda:'',obra:d.obra||'',
+      objeto:d.objeto,valor:Number(d.valor||0),desconto:0,forma:d.forma||'',cobranca:'Avulso',parcelas:[],prazo_dias:Number(d.prazo_dias||0),
+      garantia_meses:Number(d.garantia_meses||12),foro:d.foro||'',data_venda:d.data_venda||hoje(),centro_lucro:d.centro_lucro||'',
+      clausulas:d.clausulas||'',status:'Aguardando assinatura',avulso:true});
+    closeM();toast('Contrato '+numero+' criado');render();abrirContratoVenda(c.id);
+  });
 }
 function abrirContratoVenda(id){
   const c=byId('contratos',id);if(!c)return;
