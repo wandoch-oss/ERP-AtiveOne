@@ -2307,7 +2307,57 @@ R.concorrentes=v=>{
 };
 
 /* ---------- produtos: simples e kit ---------- */
-const UNIDADES=['un','pç','par','m','rolo','cx','conj','kit'];
+const UNIDADES=['un','pç','par','m','m²','rolo','cx','conj','kit','kg','L','h'];
+const OPT_ORIGEM=[['0','0 · Nacional'],['1','1 · Estrangeira, importação direta'],['2','2 · Estrangeira, adquirida no mercado interno'],
+ ['3','3 · Nacional, conteúdo importado entre 40% e 70%'],['4','4 · Nacional, processos produtivos básicos'],['5','5 · Nacional, conteúdo importado até 40%'],
+ ['6','6 · Estrangeira, importação direta sem similar nacional'],['7','7 · Estrangeira, mercado interno sem similar nacional'],['8','8 · Nacional, conteúdo importado acima de 70%']];
+const OPT_CFOP_DENTRO=[['5101','5101 · Venda de produção do estabelecimento'],['5102','5102 · Venda de mercadoria adquirida de terceiros'],
+ ['5403','5403 · Venda com substituição tributária (contribuinte substituto)'],['5405','5405 · Venda com substituição tributária (substituído)'],['5949','5949 · Outra saída não especificada']];
+const OPT_CFOP_FORA=[['6101','6101 · Venda de produção do estabelecimento'],['6102','6102 · Venda de mercadoria adquirida de terceiros'],
+ ['6403','6403 · Venda com substituição tributária (contribuinte substituto)'],['6404','6404 · Venda com substituição tributária (substituído)'],['6949','6949 · Outra saída não especificada']];
+const OPT_ICMS=[['Regime normal (CST)',[['00','00 · Tributada integralmente'],['10','10 · Tributada com cobrança de ICMS por ST'],['20','20 · Com redução de base de cálculo'],
+  ['30','30 · Isenta ou não tributada, com ST'],['40','40 · Isenta'],['41','41 · Não tributada'],['50','50 · Suspensão'],['51','51 · Diferimento'],
+  ['60','60 · ICMS cobrado anteriormente por ST'],['70','70 · Redução de base e cobrança de ICMS por ST'],['90','90 · Outras']]],
+ ['Simples Nacional (CSOSN)',[['101','101 · Tributada com permissão de crédito'],['102','102 · Tributada sem permissão de crédito'],['103','103 · Isenção do ICMS para faixa de receita bruta'],
+  ['201','201 · Com ST e permissão de crédito'],['202','202 · Com ST sem permissão de crédito'],['203','203 · Isenção para faixa de receita bruta, com ST'],
+  ['300','300 · Imune'],['400','400 · Não tributada'],['500','500 · ICMS cobrado anteriormente por ST ou antecipação'],['900','900 · Outros']]]];
+const OPT_PISCOF=[['01','01 · Tributável, alíquota básica'],['02','02 · Tributável, alíquota diferenciada'],['03','03 · Tributável, alíquota por unidade'],
+ ['04','04 · Monofásica, alíquota zero'],['05','05 · Tributável por substituição tributária'],['06','06 · Alíquota zero'],['07','07 · Isenta'],
+ ['08','08 · Sem incidência'],['09','09 · Com suspensão'],['49','49 · Outras operações de saída'],['99','99 · Outras operações']];
+const OPT_IPI=[['50','50 · Saída tributada'],['51','51 · Saída tributável com alíquota zero'],['52','52 · Saída isenta'],['53','53 · Saída não tributada'],
+ ['54','54 · Saída imune'],['55','55 · Saída com suspensão'],['99','99 · Outras saídas']];
+const fmtNCM=v=>{const c=soDig(v);return c.length===8?c.replace(/^(\d{4})(\d{2})(\d{2})$/,'$1.$2.$3'):(v||'')};
+function gtinValido(v){
+  const c=soDig(v);if(![8,12,13,14].includes(c.length))return false;
+  let soma=0;for(let i=c.length-2,w=3;i>=0;i--,w=w===3?1:3)soma+=Number(c[i])*w;
+  return (10-soma%10)%10===Number(c[c.length-1]);
+}
+function fiscalHtml(p){
+  const inp=(k,l,extra)=>'<label class="f"><span>'+l+'</span><input type="text" data-k="'+k+'" value="'+esc(p[k]||'')+'" '+(extra||'')+'></label>';
+  const al=(k,l)=>'<label class="f"><span>'+l+'</span><input type="number" step="0.01" min="0" data-k="'+k+'" value="'+(p[k]==null||p[k]===''?'':Number(p[k]))+'"></label>';
+  const sel=(k,l,opts)=>{const v=p[k]||'',flat=opts.flatMap(o=>Array.isArray(o[1])?o[1]:[o]),
+    opt=o=>'<option value="'+o[0]+'"'+(v===o[0]?' selected':'')+'>'+esc(o[1])+'</option>';
+    return '<label class="f"><span>'+l+'</span><select data-k="'+k+'"><option value=""></option>'+
+      (v&&!flat.some(o=>o[0]===v)?'<option value="'+esc(v)+'" selected>'+esc(v)+'</option>':'')+
+      opts.map(o=>Array.isArray(o[1])?'<optgroup label="'+esc(o[0])+'">'+o[1].map(opt).join('')+'</optgroup>':opt(o)).join('')+'</select></label>'};
+  return '<div class="fsec">Dados fiscais</div>'+
+    '<div class="note" style="margin:-4px 0 8px">Ainda não emite nota fiscal, mas deixe os dados em dia. Os códigos de tributação dependem do regime de cada empresa; confirme com o contador.</div>'+
+    '<label class="f"><span>Descrição detalhada (nota fiscal)</span><textarea data-k="descricao_fiscal" style="min-height:48px">'+esc(p.descricao_fiscal||'')+'</textarea></label>'+
+    '<div class="frow">'+inp('gtin','GTIN / EAN (código de barras)','inputmode="numeric"')+inp('ncm','NCM (8 dígitos)','inputmode="numeric" placeholder="0000.00.00"')+'</div>'+
+    '<div class="frow">'+inp('cest','CEST (7 dígitos, se houver substituição tributária)','inputmode="numeric"')+sel('origem','Origem da mercadoria',OPT_ORIGEM)+'</div>'+
+    '<div class="frow">'+sel('cfop_dentro','CFOP · venda dentro do estado',OPT_CFOP_DENTRO)+sel('cfop_fora','CFOP · venda para outro estado',OPT_CFOP_FORA)+'</div>'+
+    '<div class="frow">'+sel('icms_cst','ICMS · CST / CSOSN',OPT_ICMS)+al('icms_aliq','ICMS · alíquota (%)')+'</div>'+
+    '<div class="frow">'+sel('pis_cst','PIS · CST',OPT_PISCOF)+al('pis_aliq','PIS · alíquota (%)')+'</div>'+
+    '<div class="frow">'+sel('cofins_cst','COFINS · CST',OPT_PISCOF)+al('cofins_aliq','COFINS · alíquota (%)')+'</div>'+
+    '<div class="frow">'+sel('ipi_cst','IPI · CST',OPT_IPI)+al('ipi_aliq','IPI · alíquota (%)')+'</div>';
+}
+function validarFiscal(p){
+  p.gtin=soDig(p.gtin);p.ncm=soDig(p.ncm);p.cest=soDig(p.cest);
+  if(p.gtin&&!gtinValido(p.gtin))return 'GTIN / EAN inválido. Use 8, 12, 13 ou 14 dígitos; confira os números.';
+  if(p.ncm&&p.ncm.length!==8)return 'O NCM precisa ter 8 dígitos.';
+  if(p.cest&&p.cest.length!==7)return 'O CEST precisa ter 7 dígitos.';
+  return '';
+}
 function editarProduto(id,after){
   const orig=id?byId('produtos',id):null;
   const p=orig?JSON.parse(JSON.stringify(orig)):{tipo:'Simples',status:'Ativo',unidade:'un',componentes:[]};
@@ -2361,6 +2411,7 @@ function editarProduto(id,after){
         (sug&&!v?'<button class="btn sec sm" id="usaSug">Usar soma avulsa como preço</button>':'')+
         '<div class="note">O custo do kit é calculado pelos componentes e se atualiza sozinho quando o custo deles muda. Kit não tem estoque próprio: ao reservar ou baixar um kit, o sistema movimenta cada componente.</div>';
     }
+    h+=fiscalHtml(p);
     if(orig)h+='<div style="margin-top:12px"><button class="btn '+(ativo(p)?'dgr':'sec')+' sm" id="pCan">'+(ativo(p)?'Cancelar produto':'Reativar produto')+'</button></div>';
     modal.className='wide';
     modal.innerHTML='<div class="mhead"><h3>'+(orig?'Editar produto':'Novo produto')+(ativo(p)?'':' <span class="bg g-red">cancelado</span>')+'</h3>'+
@@ -2390,6 +2441,7 @@ function editarProduto(id,after){
       p.sku=String(p.sku||'').trim();p.nome=String(p.nome||'').trim();
       if(!p.sku||!p.nome){toast('Preencha SKU e descrição');return}
       if(!p.familia||!p.categoria){toast('Escolha a família e a categoria');return}
+      const ef=validarFiscal(p);if(ef){toast(ef);return}
       if(S.produtos.some(x=>x.id!==p.id&&String(x.sku).toLowerCase()===p.sku.toLowerCase())){toast('Já existe produto com esse SKU');return}
       if(p.tipo==='Kit'){
         const tot=p.componentes.reduce((a,c)=>a+Number(c.qtd||0),0);
@@ -2672,7 +2724,7 @@ R.cadastros=v=>{
         return d.length+(v?' <span class="bg g-red">'+v+' vencido(s)</span>':'')+(q?' <span class="bg g-amber">'+q+' a vencer</span>':'')}},
       {l:'Status',f:r=>'<span class="bg '+(ativo(r)?'g-green':'g-red')+'">'+(ativo(r)?'Ativa':'Cancelada')+'</span>'}],
     produtos:[{l:'Tipo',f:r=>'<span class="bg '+(ehKit(r)?'g-purple':'g-gray')+'">'+tipoProd(r)+'</span>'},
-      {l:'SKU',k:'sku',s:1},{l:'Descrição',f:r=>esc(r.nome)+(ehKit(r)?'<div style="font-size:11px;color:var(--faint)">'+esc(descComp(r))+'</div>':'')},
+      {l:'SKU',k:'sku',s:1},{l:'NCM',f:r=>r.ncm?esc(fmtNCM(r.ncm)):'<span style="color:var(--faint)">—</span>'},{l:'Descrição',f:r=>esc(r.nome)+(ehKit(r)?'<div style="font-size:11px;color:var(--faint)">'+esc(descComp(r))+'</div>':'')},
       {l:'Família',f:r=>esc(nomeClass('familias',r.familia))},{l:'Categoria',f:r=>esc(nomeClass('categorias',r.categoria))},
       {l:'Custo',n:1,f:r=>money(custoProduto(r))},{l:'Venda',n:1,f:r=>money(r.venda)},
       {l:'Margem',n:1,f:r=>{const c=custoProduto(r);return Number(r.venda)?pct((r.venda-c)/r.venda*100):'—'}},
