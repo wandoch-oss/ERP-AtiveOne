@@ -1179,7 +1179,7 @@ async function cancelarVenda(v){
 
 /* ---------- obras ---------- */
 R.obras=v=>{
-  v.innerHTML='<div class="toolbar"><button class="btn" id="np">+ Novo projeto</button><select id="fs"><option value="">Todos os status</option>'+
+  v.innerHTML='<div class="toolbar"><button class="btn" id="np">+ Novo projeto</button><div class="seg" id="vista"><button data-vista="lista" class="'+(obrasVista==='lista'?'on':'')+'">Lista</button><button data-vista="tempo" class="'+(obrasVista==='tempo'?'on':'')+'">Linha do tempo</button></div><select id="fs"><option value="">Todos os status</option>'+
     ['Em execução','Concluída','Pausada','Cancelada'].map(x=>'<option>'+x+'</option>').join('')+'</select>'+
     '<select id="fv"><option value="">Todas as verticais</option>'+VERTICAIS.map(x=>'<option>'+x+'</option>').join('')+'</select>'+
     '<select id="fc"><option value="">Todos os centros de lucro</option>'+S.centros_lucro.map(c=>'<option value="'+c.id+'">'+esc(rotCentro(c))+'</option>').join('')+'</select></div>'+
@@ -1196,6 +1196,7 @@ R.obras=v=>{
       kpi('Contratado',money(rows.reduce((a,o)=>a+Number(o.valor||0),0)))+
       kpi('Resultado até a entrega',money(tot.e))+kpi('Resultado ciclo completo',money(tot.c),tot.r?'margem '+pct(tot.c/tot.r*100):'');
     const el=document.getElementById('lst');
+    if(obrasVista==='tempo'){el.innerHTML=ganttObras(rows);wireGanttObras(el);return}
     el.innerHTML=tbl([{l:'Código',k:'codigo',s:1},{l:'Cliente',f:r=>esc(nm('clientes',r.cliente))}].concat(colUnid('obras'),[
       {l:'Vertical',f:r=>'<span class="bg g-accent">'+esc(r.vertical||'—')+'</span>'},
       {l:'Centro de lucro',f:r=>'<span style="font-size:12px">'+esc(nomeCentro('lucro',centroDe('lucro','obras',r)))+'</span>'},
@@ -1207,7 +1208,9 @@ R.obras=v=>{
       rows,{onRow:abrirObra,empty:'Nenhum projeto. Converta um orçamento em venda para abrir o primeiro.'});
     wireTable(el,'obras',{onRow:abrirObra});
   };
-  ['fs','fv','fc'].forEach(i=>document.getElementById(i).onchange=draw);draw();
+  ['fs','fv','fc'].forEach(i=>document.getElementById(i).onchange=draw);
+  document.querySelectorAll('#vista [data-vista]').forEach(b=>b.onclick=()=>{obrasVista=b.dataset.vista;render()});
+  draw();
 };
 let obraTab='resultado';
 function abrirObra(oid){
@@ -1215,7 +1218,7 @@ function abrirObra(oid){
   const draw=()=>{
     const cm=custoMaterialObra(oid),cmo=custoMaoObra(oid),ct=custoTerceiros(oid),tot=cm+cmo+ct,rec=receitaObra(oid);
     let h='';
-    h+='<div class="tabs">'+[['resultado','Resultado'],['etapas','Etapas'],['res','Reservas'],['horas','Horas'],['mat','Materiais'],
+    h+='<div class="tabs">'+[['resultado','Resultado'],['etapas','Etapas'],['cron','Cronograma'],['res','Reservas'],['horas','Horas'],['mat','Materiais'],
       ['adt','Aditivos'],['custo','Orçado × realizado'],['os','Atendimentos'],['ent','Entrega']]
       .map(t=>'<button class="tab'+(obraTab===t[0]?' on':'')+'" data-tab="'+t[0]+'">'+t[1]+'</button>').join('')+'</div><div id="tb"></div>';
     h+='<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn sec sm" id="ed">Editar projeto</button>'+
@@ -1237,6 +1240,8 @@ function abrirObra(oid){
         {l:'',n:1,f:e=>e.status!=='Concluída'?'<button class="btn sec sm" data-et="'+esc(e.nome)+'">Concluir</button>':''}],
         (o.etapas||[]).map((e,i)=>Object.assign({id:'e'+i},e)),{empty:'Sem etapas.'});
       tb.querySelectorAll('[data-et]').forEach(b=>b.onclick=()=>concluirEtapa(o,b.dataset.et,draw));
+    }else if(obraTab==='cron'){
+      tb.innerHTML=cronogramaObraHtml(o);wireCronogramaObra(tb,o,draw);
     }else if(obraTab==='horas'){
       const ap=S.apontamentos.filter(a=>a.obra===oid);
       tb.innerHTML=tbl([{l:'Data',f:a=>dBR(a.data)},{l:'Colaborador',f:a=>esc(nm('colaboradores',a.colaborador))},
