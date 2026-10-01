@@ -371,7 +371,7 @@ const NAV=[
  {g:'Marketing',i:[['canais','Canais','⌁'],['campanhas','Campanhas','✦'],['marketing','Resultados','◈'],['concorrentes','Concorrência','◐']]},
  {g:'Comercial',i:[['clientes','Clientes','◎'],['oportunidades','Oportunidades','↗'],['orcamentos','Orçamentos','▤'],['vendas','Vendas','✓']]},
  {g:'Operação',i:[['obras','Projetos','⌂'],['os','Ordens de serviço','☎'],['agenda','Agenda','▦']]},
- {g:'Compras',i:[['estoque','Estoque','▣'],['compras','Pedido de Compra','⇄']]},
+ {g:'Compras',i:[['compras','Pedido de Compra','⇄'],['estoque','Estoque','▣']]},
  {g:'Financeiro',i:[['financeiro','Contas','$'],['fluxo','Fluxo de caixa','≈'],['dre','DRE gerencial','◱']]},
  {g:'Gestão',i:[['contratos','Contratos','⎘']]},
  {g:'Sistema',i:[['cadastros','Cadastros','⚙']]}
