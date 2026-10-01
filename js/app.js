@@ -2831,7 +2831,7 @@ R.cadastros=v=>{
     (cadTab==='produtos'?'<select id="fTp"><option value="">Simples e kits</option><option>Simples</option><option>Kit</option></select>'+
       '<select id="fFm"><option value="">Todas as famílias</option>'+S.familias.map(f=>'<option value="'+f.id+'">'+esc(f.nome)+'</option>').join('')+'</select>'+
       '<input type="text" id="fBu" placeholder="Buscar SKU ou descrição…">':'')+
-    ((['familias','categorias','centros_lucro','centros_custo','categorias_servico','plano_contas'].includes(cadTab))?'<button class="btn sec sm" id="padrao">'+(cadTab==='plano_contas'?'Carregar plano padrão':'Carregar lista padrão')+'</button>':'')+(cadTab==='plano_contas'?'<button class="btn sec sm" id="clas">Classificar lançamentos existentes</button>':'')+
+    ((['familias','categorias','centros_lucro','centros_custo','categorias_servico','plano_contas'].includes(cadTab))?'<button class="btn sec sm" id="padrao">'+(cadTab==='plano_contas'?'Carregar plano padrão':'Carregar lista padrão')+'</button>':'')+(cadTab==='plano_contas'?'<button class="btn sec sm" id="impc">Importar de arquivo (CSV)</button><button class="btn sec sm" id="modc">Baixar modelo</button><input type="file" id="fpc" accept=".csv,.txt" style="display:none"><button class="btn sec sm" id="clas">Classificar lançamentos existentes</button>':'')+
     ((['empresas','centros_lucro','centros_custo','produtos','familias','categorias','servicos','categorias_servico','colaboradores','parceiros','plano_contas'].includes(cadTab))?'<label style="font-size:12.5px;color:var(--dim);display:flex;gap:6px;align-items:center">'+
       '<input type="checkbox" id="fCa"'+(verCancelados?' checked':'')+'> mostrar cancelados</label>':'')+'</div>'+
     '<div class="card"><div class="cbody" id="lst"></div></div>'+
@@ -2844,6 +2844,8 @@ R.cadastros=v=>{
   v.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{cadTab=b.dataset.tab;render()});
   document.getElementById('nv').onclick=()=>editRec(cadTab,null);
   const pd=document.getElementById('padrao');
+  const ip=document.getElementById('impc');if(ip){ip.onclick=()=>document.getElementById('fpc').click();document.getElementById('fpc').onchange=e=>importarPlanoArquivo(e.target.files);
+    document.getElementById('modc').onclick=()=>baixarArquivo('modelo-plano-de-contas.csv','\uFEFF'+MODELO_PLANO)}
   const cl2=document.getElementById('clas');
   if(cl2)cl2.onclick=async()=>{if(!(await ask('Atribuir uma conta do plano aos lançamentos que ainda não têm, a partir da categoria de cada um? Você pode ajustar depois em cada lançamento.','Classificar')))return;toast(classificarLancamentos()+' lançamento(s) classificado(s)');render()};
   if(pd)pd.onclick=()=>{if(cadTab==='plano_contas'){toast(planoPadrao()+' conta(s) criada(s)');render();return}
