@@ -551,7 +551,7 @@ function editRec(col,id,after,preset){
 /* ---------- navegação ---------- */
 const NAV=[
  {g:'',i:[['painel','Painel','◧']]},
- {g:'Marketing',i:[['canais','Canais','⌁'],['campanhas','Campanhas','✦'],['parcerias','Parcerias','⚭'],['marketing','Resultados','◈'],['concorrentes','Concorrência','◐']]},
+ {g:'Marketing',i:[['canais','Canais','⌁'],['campanhas','Campanhas','✦'],['marketing','Resultados','◈'],['parcerias','Parcerias','⚭'],['concorrentes','Concorrência','◐']]},
  {g:'Comercial',i:[['clientes','Clientes','◎'],['oportunidades','Oportunidades','↗'],['orcamentos','Orçamentos','▤'],['vendas','Vendas','✓']]},
  {g:'Operação',i:[['obras','Projetos','⌂'],['os','Ordens de serviço','☎'],['agenda','Agenda','▦']]},
  {g:'Compras',i:[['compras','Pedido de Compra','⇄'],['estoque','Estoque','▣']]},
