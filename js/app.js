@@ -132,7 +132,8 @@ const bgFor=s=>({'Fechada':'g-green','Convertido':'g-green','Cancelada':'g-red',
 /* ---------- modal e formulários ---------- */
 const ovl=document.getElementById('ovl'), modal=document.getElementById('modal');
 let onSave=null;
-function closeM(){ovl.classList.remove('on');onSave=null}
+let posFechar=null;
+function closeM(){ovl.classList.remove('on');onSave=null;if(posFechar){const f=posFechar;posFechar=null;f()}}
 ovl.addEventListener('click',e=>{if(e.target===ovl)closeM()});
 function openM(title,bodyHtml,saveLabel,fn,wide){
   modal.className=wide?'wide':'';
@@ -2496,7 +2497,8 @@ function editarEmpresa(id,after,aba){
   const e=orig?JSON.parse(JSON.stringify(orig)):{tipo:S.empresas.some(x=>x.tipo==='Matriz'&&ativo(x))?'Filial':'Matriz',
     status:'Ativa',documentos:[],uf:'DF',regime:'Simples Nacional'};
   empTab=aba||'dados';
-  const fim=()=>{closeM();after?after():render()};
+  posFechar=()=>{after?after():render()};
+  const fim=()=>{posFechar=null;closeM();after?after():render()};
   const ler=()=>modal.querySelectorAll('[data-k]').forEach(el=>{if(el.dataset.k!=='id')e[el.dataset.k]=el.value});
   const campos=()=>({
     dados:[{t:'secao',l:'Identificação'},
