@@ -1,7 +1,7 @@
 /* ---------- estado e persistência ---------- */
 const COLS=['clientes','oportunidades','orcamentos','obras','os','agenda','contratos','apontamentos',
 'produtos','servicos','locais','estoque','compras','fornecedores','financeiro','nfe','campanhas',
-'concorrentes','colaboradores','ajustes','reservas','aditivos','familias','categorias','vendas','canais','empresas','centros_lucro','centros_custo'];
+'concorrentes','contas_bancarias','extrato','colaboradores','ajustes','reservas','aditivos','familias','categorias','vendas','canais','empresas','centros_lucro','centros_custo'];
 const S={}; COLS.forEach(c=>S[c]=[]);
 let DB=null, DL=null, FB=null, ASSETS=null, MODE='local', pend={};
 
@@ -50,6 +50,8 @@ const U=col=>UNID?S[col].filter(r=>naUnid(col,r)):S[col];
 const multiUnid=()=>S.empresas.filter(e=>ativo(e)).length>1;
 const nomeUnid=id=>{const e=byId('empresas',id);return e?(e.nome_fantasia||e.razao_social):'—'};
 const campoUnid={k:'empresa',l:'Unidade',t:'ref',col:'empresas',filtro:r=>ativo(r),rotulo:r=>(r.nome_fantasia||r.razao_social)+' · '+r.tipo};
+const rotConta=c=>c?(c.nome+(c.banco?' · '+c.banco:'')):'—';
+const campoConta={k:'conta',l:'Conta bancária',t:'ref',col:'contas_bancarias',filtro:r=>ativo(r),rotulo:rotConta};
 const rotCentro=r=>(r.codigo?r.codigo+' · ':'')+r.nome;
 const campoCL={k:'centro_lucro',l:'Centro de lucro',t:'ref',col:'centros_lucro',filtro:r=>ativo(r),rotulo:rotCentro};
 const campoCC={k:'centro_custo',l:'Centro de custo',t:'ref',col:'centros_custo',filtro:r=>ativo(r),rotulo:rotCentro};
@@ -299,7 +301,12 @@ const SCH={
    {k:'cliente',l:'Cliente',t:'ref',col:'clientes'},{k:'fornecedor',l:'Fornecedor',t:'ref',col:'fornecedores'},
    {k:'obra',l:'Projeto (rateio)',t:'ref',col:'obras',lab:'codigo'},campoCL,campoCC,
    {k:'status',l:'Status',t:'select',opts:['Pendente','Pago','Recebido','Atrasado'],req:1},
-   {k:'pagamento',l:'Data de liquidação',t:'date'}]},
+   {k:'pagamento',l:'Data de liquidação',t:'date'},campoConta]},
+ contas_bancarias:{t:'Conta bancária',fem:1,cancelavel:1,f:[
+   {k:'nome',l:'Apelido da conta',req:1},{k:'banco',l:'Banco'},
+   {k:'agencia',l:'Agência'},{k:'numero',l:'Número da conta'},
+   {k:'tipo',l:'Tipo',t:'select',opts:['Conta corrente','Poupança','Aplicação','Caixa']},campoUnid,
+   {k:'saldo_inicial',l:'Saldo inicial (R$)',t:'money'},{k:'data_saldo',l:'Saldo em (data)',t:'date'}]},
  compras:{t:'Pedido de compra',f:[
    {k:'fornecedor',l:'Fornecedor',t:'ref',col:'fornecedores',req:1},campoUnid,
    {k:'obra',l:'Projeto destino',t:'ref',col:'obras',lab:'codigo'},campoCC,
@@ -372,7 +379,7 @@ const NAV=[
  {g:'Comercial',i:[['clientes','Clientes','◎'],['oportunidades','Oportunidades','↗'],['orcamentos','Orçamentos','▤'],['vendas','Vendas','✓']]},
  {g:'Operação',i:[['obras','Projetos','⌂'],['os','Ordens de serviço','☎'],['agenda','Agenda','▦']]},
  {g:'Compras',i:[['compras','Pedido de Compra','⇄'],['estoque','Estoque','▣']]},
- {g:'Financeiro',i:[['financeiro','Contas','$'],['fluxo','Fluxo de caixa','≈'],['dre','DRE gerencial','◱']]},
+ {g:'Financeiro',i:[['financeiro','Pagar e receber','$'],['bancos','Contas bancárias','▭'],['conciliacao','Conciliação','⇋'],['fluxo','Fluxo de caixa','≈'],['dre','DRE gerencial','◱']]},
  {g:'Gestão',i:[['contratos','Contratos','⎘']]},
  {g:'Sistema',i:[['cadastros','Cadastros','⚙']]}
 ];
@@ -384,6 +391,7 @@ const SUB={painel:'Visão geral da operação',clientes:'Base, histórico e rent
  os:'Ordens de serviço, garantia e retrabalho',agenda:'Calendário e capacidade da equipe',
  contratos:'Manutenção recorrente e SLA',estoque:'Multilocal: almoxarifado, técnico e obra',
  compras:'Pedidos, fornecedores e importação de XML',financeiro:'Contas a pagar e a receber',
+ bancos:'Contas bancárias e saldos',conciliacao:'Importação de extratos e conciliação bancária',
  fluxo:'Projeção unificada de entradas e saídas',dre:'Resultado gerencial por vertical',
  cadastros:'Produtos, serviços, equipe e locais'};
 let route='painel';
@@ -425,7 +433,7 @@ function render(){
   drawUnid();
   drawNav();
   document.getElementById('ttl').textContent=(NAV.flatMap(g=>g.i).find(i=>i[0]===route)||[,'Painel'])[1];
-  document.getElementById('sub').textContent=(SUB[route]||'')+(UNID&&['painel','vendas','orcamentos','obras','os','contratos','estoque','compras','financeiro','fluxo','dre','marketing'].includes(route)?' · '+nomeUnid(UNID):'');
+  document.getElementById('sub').textContent=(SUB[route]||'')+(UNID&&['painel','vendas','orcamentos','obras','os','contratos','estoque','compras','financeiro','bancos','conciliacao','fluxo','dre','marketing'].includes(route)?' · '+nomeUnid(UNID):'');
   const v=document.getElementById('view');
   v.innerHTML='';
   (R[route]||R.painel)(v);
@@ -1827,6 +1835,206 @@ R.financeiro=v=>{
   };
   document.getElementById('ft').onchange=draw;document.getElementById('fs').onchange=draw;draw();
 };
+
+/* ---------- contas bancárias e conciliação ---------- */
+const difDias=(a,b)=>Math.round((new Date(a+'T12:00:00')-new Date(b+'T12:00:00'))/864e5);
+const saldoConta=c=>Number(c.saldo_inicial||0)+S.extrato.filter(x=>x.conta===c.id&&(!c.data_saldo||x.data>c.data_saldo))
+  .reduce((a,x)=>a+Number(x.valor||0),0);
+const lancLivre=l=>!S.extrato.some(x=>x.lancamento===l.id);
+function sugestoesConc(e){
+  const tipo=e.valor>0?'Receber':'Pagar',abs=Math.abs(e.valor);
+  return S.financeiro.filter(l=>{
+    if(l.tipo!==tipo||!lancLivre(l)||Math.abs(Number(l.valor||0)-abs)>=0.005||(l.conta&&l.conta!==e.conta))return false;
+    const pend=l.status==='Pendente'||l.status==='Atrasado',ref=pend?l.vencimento:(l.pagamento||l.vencimento);
+    return Math.abs(difDias(ref,e.data))<=15;
+  }).sort((a,b)=>Math.abs(difDias(a.vencimento,e.data))-Math.abs(difDias(b.vencimento,e.data)));
+}
+function conciliar(eid,lid){
+  const e=byId('extrato',eid),l=byId('financeiro',lid);if(!e||!l)return;
+  if(l.status==='Pendente'||l.status==='Atrasado'){l.status=l.tipo==='Receber'?'Recebido':'Pago';l.pagamento=e.data;l.liq_conc=true}
+  l.conta=e.conta;l.extrato=e.id;put('financeiro',l);
+  e.status='Conciliado';e.lancamento=l.id;put('extrato',e);
+}
+function desconciliar(eid){
+  const e=byId('extrato',eid);if(!e)return;
+  const l=byId('financeiro',e.lancamento);
+  if(l){delete l.extrato;if(l.liq_conc){l.status='Pendente';l.pagamento='';delete l.liq_conc}put('financeiro',l)}
+  e.status='Pendente';e.lancamento='';put('extrato',e);
+}
+/* leitura de extratos: OFX e CSV */
+async function lerTexto(f){
+  const buf=await f.arrayBuffer();
+  try{return new TextDecoder('utf-8',{fatal:true}).decode(buf)}
+  catch(e){return new TextDecoder('windows-1252').decode(buf)}
+}
+function parseOFX(t){
+  const out=[],re=/<STMTTRN>([\s\S]*?)(?=<\/STMTTRN>|<STMTTRN>|<\/BANKTRANLIST>|$)/gi;let m;
+  while((m=re.exec(t))){
+    const b=m[1],g=k=>{const r=new RegExp('<'+k+'>([^<\\r\\n]*)','i').exec(b);return r?r[1].trim():''};
+    const dt=g('DTPOSTED').slice(0,8),val=Number(g('TRNAMT').replace(',','.'));
+    if(dt.length<8||isNaN(val))continue;
+    out.push({data:dt.slice(0,4)+'-'+dt.slice(4,6)+'-'+dt.slice(6,8),valor:val,fitid:g('FITID'),
+      descricao:(g('MEMO')||g('NAME')).replace(/\s+/g,' '),doc:g('CHECKNUM')||g('REFNUM')});
+  }
+  return out;
+}
+function numBR(s){
+  s=String(s==null?'':s).trim();if(!s)return NaN;
+  let neg=/^\(.*\)$/.test(s)||/-/.test(s)||/\s*D$/i.test(s);
+  s=s.replace(/[^0-9.,]/g,'');if(!s)return NaN;
+  if(s.includes(',')&&s.includes('.')){s=s.lastIndexOf(',')>s.lastIndexOf('.')?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,'')}
+  else if(s.includes(','))s=s.replace(',','.');
+  const n=Number(s);return isNaN(n)?NaN:(neg?-n:n);
+}
+function dataBR(s){
+  s=String(s||'').trim();let m=/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/.exec(s);
+  if(m){const y=m[3].length===2?'20'+m[3]:m[3];return y+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0')}
+  m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s);return m?m[0]:'';
+}
+function splitCSV(linha,sep){
+  const out=[];let cur='',q=false;
+  for(let i=0;i<linha.length;i++){const c=linha[i];
+    if(c==='"'){if(q&&linha[i+1]==='"'){cur+='"';i++}else q=!q}
+    else if(c===sep&&!q){out.push(cur);cur=''}else cur+=c}
+  out.push(cur);return out.map(x=>x.trim());
+}
+function parseCSV(t){
+  const linhas=t.split(/\r?\n/).filter(l=>l.trim());if(!linhas.length)return[];
+  const sep=[';','\t',','].map(s=>[s,linhas.slice(0,8).join('\n').split(s).length]).sort((a,b)=>b[1]-a[1])[0][0];
+  const rows=linhas.map(l=>splitCSV(l,sep));
+  let hi=rows.findIndex(r=>r.some(c=>/^data/i.test(c))&&r.some(c=>/valor|cr[eé]dito|d[eé]bito/i.test(c)));
+  const H=hi>=0?rows[hi]:[],col=re=>H.findIndex(c=>re.test(c));
+  let cd=col(/^data/i),cds=col(/hist|descri|lan[cç]amento|memo/i),cv=col(/^valor/i),cc=col(/cr[eé]dito/i),cdb=col(/d[eé]bito/i),cdoc=col(/doc|n[uú]mero/i);
+  if(hi<0){cd=0;cds=1;cv=rows[0].length-1}
+  const out=[];
+  rows.slice(hi+1).forEach(r=>{
+    const data=dataBR(r[cd]);if(!data)return;
+    let val=NaN;
+    if(cv>=0)val=numBR(r[cv]);
+    if(isNaN(val)&&(cc>=0||cdb>=0)){const c=cc>=0?numBR(r[cc]):NaN,d=cdb>=0?numBR(r[cdb]):NaN;
+      val=(isNaN(c)?0:Math.abs(c))-(isNaN(d)?0:Math.abs(d))}
+    if(isNaN(val)||val===0)return;
+    out.push({data:data,valor:Math.round(val*100)/100,fitid:'',descricao:String(r[cds]||'').replace(/\s+/g,' '),doc:cdoc>=0?r[cdoc]:''});
+  });
+  return out;
+}
+async function importarExtrato(files,cid){
+  if(!files||!files.length)return;
+  if(!cid){toast('Escolha a conta bancária primeiro');return}
+  let novos=0,dup=0,lidos=0;
+  for(const f of files){
+    let linhas=[];
+    try{const t=await lerTexto(f);linhas=/<STMTTRN>/i.test(t)||/\.ofx$/i.test(f.name)?parseOFX(t):parseCSV(t)}catch(e){}
+    lidos+=linhas.length;
+    const vistos={};
+    linhas.forEach(x=>{
+      const base=cid+'|'+(x.fitid||(x.data+'|'+x.valor+'|'+x.descricao));
+      vistos[base]=(vistos[base]||0)+1;
+      const chave=base+'#'+vistos[base];
+      if(S.extrato.some(e=>e.chave===chave)){dup++;return}
+      put('extrato',{conta:cid,data:x.data,descricao:x.descricao,valor:x.valor,doc:x.doc||'',chave:chave,arquivo:f.name,status:'Pendente',lancamento:''});
+      novos++;
+    });
+  }
+  if(!lidos)toast('Não consegui ler movimentos. Use arquivos OFX ou CSV com data, descrição e valor.');
+  else toast(novos+' movimento(s) importado(s)'+(dup?' · '+dup+' já existiam':''));
+  render();
+}
+R.bancos=v=>{
+  const cs=U('contas_bancarias').slice().sort((a,b)=>(ativo(b)-ativo(a))||a.nome.localeCompare(b.nome));
+  const tot=cs.filter(ativo).reduce((a,c)=>a+saldoConta(c),0);
+  const pend=S.extrato.filter(e=>e.status==='Pendente'&&cs.some(c=>c.id===e.conta)).length;
+  v.innerHTML='<div class="kpis">'+kpi('Saldo nas contas',money(tot),cs.filter(ativo).length+' conta(s) ativa(s)')+
+    kpi('Movimentos a conciliar',pend,'')+'</div>'+
+    '<div class="toolbar"><button class="btn" id="nv">+ Conta bancária</button></div>'+
+    '<div class="card"><div class="cbody" id="lst"></div></div>'+
+    '<div class="note">O saldo é o saldo inicial mais os movimentos dos extratos importados depois da data do saldo. Importe e concilie em Financeiro → Conciliação.</div>';
+  document.getElementById('nv').onclick=()=>editRec('contas_bancarias',null);
+  const el=document.getElementById('lst');
+  el.innerHTML=tbl([{l:'Conta',s:1,f:c=>esc(c.nome)},{l:'Banco',k:'banco'},
+    {l:'Agência / conta',f:c=>esc([c.agencia,c.numero].filter(Boolean).join(' / ')||'—')},{l:'Tipo',k:'tipo'}].concat(colUnid('contas_bancarias'),[
+    {l:'A conciliar',n:1,f:c=>S.extrato.filter(e=>e.conta===c.id&&e.status==='Pendente').length},
+    {l:'Último movimento',f:c=>dBR(S.extrato.filter(e=>e.conta===c.id).map(e=>e.data).sort().pop())},
+    {l:'Saldo',n:1,f:c=>money(saldoConta(c))},
+    {l:'Status',f:c=>'<span class="bg '+(ativo(c)?'g-green':'g-gray')+'">'+(ativo(c)?'Ativa':'Cancelada')+'</span>'}]),
+    cs,{acts:1,empty:'Nenhuma conta bancária. Cadastre a primeira para importar extratos.'});
+  wireTable(el,'contas_bancarias');
+};
+R.conciliacao=v=>{
+  const cs=U('contas_bancarias').filter(ativo);
+  if(!cs.length){
+    v.innerHTML='<div class="card"><div class="cbody"><div class="empty">Cadastre uma conta bancária para importar extratos. '+
+      '<button class="btn sm" id="nc">Cadastrar conta</button></div></div></div>';
+    document.getElementById('nc').onclick=()=>go('bancos');return;
+  }
+  if(!cs.some(c=>c.id===CONC.conta))CONC.conta=cs[0].id;
+  v.innerHTML='<div class="toolbar"><select id="cc">'+cs.map(c=>'<option value="'+c.id+'"'+(c.id===CONC.conta?' selected':'')+'>'+esc(rotConta(c))+'</option>').join('')+'</select>'+
+    '<select id="cs"><option value="Pendente">A conciliar</option><option value="Conciliado">Conciliados</option><option value="Ignorado">Ignorados</option><option value="">Todos</option></select></div>'+
+    '<div class="kpis" id="ck"></div>'+
+    '<div class="card"><div class="chead"><h2>Importar extrato</h2></div><div class="cbody">'+
+    '<div class="drop" id="drop">Clique aqui ou arraste o extrato (OFX ou CSV)<br><span style="font-size:11px">Movimentos já importados são ignorados; pode reimportar períodos sobrepostos</span></div>'+
+    '<input type="file" id="fx" accept=".ofx,.csv,.txt" multiple style="display:none"></div></div>'+
+    '<div class="card"><div class="cbody" id="lst"></div></div>'+
+    '<div class="note">Entrada procura uma conta a receber e saída uma conta a pagar com o mesmo valor, vencimento até 15 dias de diferença. Ao conciliar um lançamento pendente, ele é baixado na data do extrato.</div>';
+  const sel=document.getElementById('cc'),fs=document.getElementById('cs');fs.value=CONC.status;
+  sel.onchange=()=>{CONC.conta=sel.value;render()};fs.onchange=()=>{CONC.status=fs.value;render()};
+  const drop=document.getElementById('drop'),fx=document.getElementById('fx');
+  drop.onclick=()=>fx.click();
+  drop.ondragover=e=>{e.preventDefault();drop.classList.add('hot')};
+  drop.ondragleave=()=>drop.classList.remove('hot');
+  drop.ondrop=e=>{e.preventDefault();drop.classList.remove('hot');importarExtrato(e.dataTransfer.files,CONC.conta)};
+  fx.onchange=()=>importarExtrato(fx.files,CONC.conta);
+  const conta=byId('contas_bancarias',CONC.conta),todos=S.extrato.filter(e=>e.conta===CONC.conta);
+  const pend=todos.filter(e=>e.status==='Pendente');
+  document.getElementById('ck').innerHTML=kpi('Saldo da conta',money(saldoConta(conta)),'extrato importado')+
+    kpi('A conciliar',pend.length,money(pend.reduce((a,e)=>a+Number(e.valor||0),0)))+
+    kpi('Conciliados',todos.filter(e=>e.status==='Conciliado').length,'');
+  const rows=todos.filter(e=>!CONC.status||e.status===CONC.status).sort((a,b)=>b.data.localeCompare(a.data));
+  const el=document.getElementById('lst');
+  el.innerHTML=tbl([{l:'Data',f:e=>dBR(e.data)},{l:'Descrição',s:1,f:e=>esc(e.descricao||'—')},
+    {l:'Valor',n:1,f:e=>'<span style="color:var(--'+(e.valor<0?'red':'green')+')">'+money(e.valor)+'</span>'},
+    {l:'Lançamento',f:e=>{
+      if(e.status==='Conciliado'){const l=byId('financeiro',e.lancamento);return '<span class="bg g-green">Conciliado</span> '+esc(l?l.descricao:'(lançamento excluído)')}
+      if(e.status==='Ignorado')return '<span class="bg g-gray">Ignorado</span>';
+      const s=sugestoesConc(e)[0];
+      return s?'<span class="bg g-amber">Sugestão</span> '+esc(s.descricao)+' · '+dBR(s.vencimento):'<span style="color:var(--faint)">sem correspondência</span>'}},
+    {l:'',n:1,f:e=>{
+      if(e.status==='Conciliado')return '<button class="btn sec sm" data-un="'+e.id+'">Desfazer</button>';
+      if(e.status==='Ignorado')return '<button class="btn sec sm" data-re="'+e.id+'">Reativar</button>';
+      const s=sugestoesConc(e)[0];
+      return (s?'<button class="btn sm" data-ok="'+e.id+'|'+s.id+'">Conciliar</button> ':'')+
+        '<button class="btn sec sm" data-pk="'+e.id+'">Escolher</button> <button class="btn sec sm" data-cr="'+e.id+'">Criar lançamento</button> '+
+        '<button class="btn sec sm" data-ig="'+e.id+'">Ignorar</button>'}}],
+    rows,{empty:todos.length?'Nada neste filtro.':'Nenhum extrato importado nesta conta.'});
+  const on=(a,fn)=>el.querySelectorAll('['+a+']').forEach(b=>b.onclick=()=>fn(b.getAttribute(a)));
+  on('data-ok',x=>{const p=x.split('|');conciliar(p[0],p[1]);toast('Conciliado');render()});
+  on('data-un',id=>{desconciliar(id);toast('Conciliação desfeita');render()});
+  on('data-ig',id=>{const e=byId('extrato',id);e.status='Ignorado';put('extrato',e);render()});
+  on('data-re',id=>{const e=byId('extrato',id);e.status='Pendente';put('extrato',e);render()});
+  on('data-pk',id=>escolherLancamento(id));
+  on('data-cr',id=>{
+    const e=byId('extrato',id),rec=e.valor>0;
+    editRec('financeiro',null,()=>{
+      const l=S.financeiro.find(x=>x.extrato===e.id);
+      if(l){e.status='Conciliado';e.lancamento=l.id;put('extrato',e)}render()
+    },{tipo:rec?'Receber':'Pagar',descricao:e.descricao,valor:Math.abs(e.valor),vencimento:e.data,pagamento:e.data,
+      status:rec?'Recebido':'Pago',conta:e.conta,extrato:e.id,categoria:'Outros'});
+  });
+};
+const CONC={conta:'',status:'Pendente'};
+function escolherLancamento(eid){
+  const e=byId('extrato',eid),tipo=e.valor>0?'Receber':'Pagar',abs=Math.abs(e.valor);
+  const L=U('financeiro').filter(l=>l.tipo===tipo&&lancLivre(l)&&(l.status==='Pendente'||l.status==='Atrasado'))
+    .sort((a,b)=>Math.abs(Number(a.valor)-abs)-Math.abs(Number(b.valor)-abs)||Math.abs(difDias(a.vencimento,e.data))-Math.abs(difDias(b.vencimento,e.data)));
+  openM('Conciliar '+dBR(e.data)+' · '+money(e.valor),
+    '<div class="note" style="margin:0 0 10px">'+esc(e.descricao||'')+'<br>Escolha o lançamento em aberto que corresponde a este movimento. Só é possível conciliar quando os valores são iguais; se forem diferentes, ajuste o valor do lançamento antes.</div>'+
+    tbl([{l:'Venc.',f:l=>dBR(l.vencimento)},{l:'Descrição',s:1,k:'descricao'},
+      {l:'Parte',f:l=>esc(l.cliente?nm('clientes',l.cliente):l.fornecedor?nm('fornecedores',l.fornecedor):'—')},
+      {l:'Valor',n:1,f:l=>money(l.valor)},
+      {l:'',n:1,f:l=>'<button class="btn sm" data-sel="'+l.id+'"'+(Math.abs(Number(l.valor)-abs)>=0.005?' disabled':'')+'>Conciliar</button>'}],
+      L,{empty:'Nenhum lançamento em aberto deste tipo.'}),null,null,true);
+  modal.querySelectorAll('[data-sel]').forEach(b=>b.onclick=()=>{conciliar(eid,b.dataset.sel);closeM();toast('Conciliado');render()});
+}
 
 /* ---------- fluxo de caixa ---------- */
 function ajusteDe(emp){return S.ajustes.find(a=>(a.empresa||empresaPadrao())===emp)||null}
