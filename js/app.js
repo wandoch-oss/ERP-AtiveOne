@@ -156,6 +156,10 @@ function field(f,val){
     inp='<select id="'+id+'" data-k="'+f.k+'"><option value=""></option>'+antigo+
       list.map(o=>'<option value="'+o.id+'"'+(v===o.id?' selected':'')+'>'+esc((f.rotulo?f.rotulo(o):o[lab])||'—')+
         (f.filtro&&!f.filtro(o)?' (cancelado)':'')+'</option>').join('')+'</select>';
+  }else if(f.t==='imagem'){
+    inp='<div style="display:flex;align-items:center;gap:10px"><span class="logo-prev">'+(v?'<img class="blogo" src="'+esc(v)+'" alt="">':'<span class="logo-vazio">sem logo</span>')+'</span>'+
+      '<input type="file" accept="image/*" data-img="'+f.k+'" style="width:auto"><button type="button" class="btn sec sm" data-img-x="'+f.k+'">Remover</button></div>'+
+      '<input type="hidden" id="'+id+'" data-k="'+f.k+'" value="'+esc(v)+'">';
   }else if(f.t==='textarea'){
     inp='<textarea id="'+id+'" data-k="'+f.k+'">'+esc(v)+'</textarea>';
   }else if(f.t==='money'||f.t==='number'){
@@ -178,6 +182,29 @@ function formHtml(fields,rec){
   return out+'<input type="hidden" id="f_id" data-k="id" value="'+esc(rec.id||'')+'">';
 }
 const wrapRow=b=>b.length===2?'<div class="frow">'+b.join('')+'</div>':b[0];
+function logoRedim(file){
+  return new Promise((ok,err)=>{
+    const r=new FileReader();
+    r.onerror=()=>err();
+    r.onload=()=>{const im=new Image();im.onerror=()=>err();
+      im.onload=()=>{const m=128,k=Math.min(1,m/Math.max(im.width||m,im.height||m)),w=Math.max(1,Math.round((im.width||m)*k)),h=Math.max(1,Math.round((im.height||m)*k));
+        const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(im,0,0,w,h);ok(c.toDataURL('image/png'))};
+      im.src=r.result};
+    r.readAsDataURL(file);
+  });
+}
+modal.addEventListener('change',e=>{
+  const i=e.target;if(!i.dataset||!i.dataset.img||!i.files||!i.files[0])return;
+  logoRedim(i.files[0]).then(u=>{
+    const h=modal.querySelector('[data-k="'+i.dataset.img+'"]');h.value=u;
+    i.closest('label').querySelector('.logo-prev').innerHTML='<img class="blogo" src="'+u+'" alt="">';
+  }).catch(()=>toast('Não consegui ler essa imagem'));
+});
+modal.addEventListener('click',e=>{
+  const b=e.target.closest&&e.target.closest('[data-img-x]');if(!b)return;
+  modal.querySelector('[data-k="'+b.dataset.imgX+'"]').value='';
+  b.closest('label').querySelector('.logo-prev').innerHTML='<span class="logo-vazio">sem logo</span>';
+});
 function readForm(){
   const d={};let ok=true;
   modal.querySelectorAll('[data-k]').forEach(el=>{
@@ -304,6 +331,7 @@ const SCH={
    {k:'pagamento',l:'Data de liquidação',t:'date'},campoConta]},
  contas_bancarias:{t:'Conta bancária',fem:1,cancelavel:1,f:[
    {k:'nome',l:'Apelido da conta',req:1},{k:'banco',l:'Banco'},
+   {k:'logo',l:'Logo do banco',t:'imagem',full:1},
    {k:'agencia',l:'Agência'},{k:'numero',l:'Número da conta'},
    {k:'tipo',l:'Tipo',t:'select',opts:['Conta corrente','Poupança','Aplicação','Caixa']},campoUnid,
    {k:'saldo_inicial',l:'Saldo inicial (R$)',t:'money'},{k:'data_saldo',l:'Saldo em (data)',t:'date'}]},
@@ -1837,6 +1865,13 @@ R.financeiro=v=>{
 };
 
 /* ---------- contas bancárias e conciliação ---------- */
+function logoConta(c,px){
+  px=px||28;if(!c)return '';
+  if(c.logo)return '<img class="blogo" style="width:'+px+'px;height:'+px+'px" src="'+esc(c.logo)+'" alt="">';
+  const t=String(c.banco||c.nome||'?').trim(),ini=t.split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperCase();
+  let h=0;for(const ch of t)h=(h*31+ch.charCodeAt(0))%360;
+  return '<span class="blogo logo-ini" style="width:'+px+'px;height:'+px+'px;background:hsl('+h+' 45% 38%);font-size:'+Math.round(px*.4)+'px">'+esc(ini)+'</span>';
+}
 const difDias=(a,b)=>Math.round((new Date(a+'T12:00:00')-new Date(b+'T12:00:00'))/864e5);
 const saldoConta=c=>Number(c.saldo_inicial||0)+S.extrato.filter(x=>x.conta===c.id&&(!c.data_saldo||x.data>c.data_saldo))
   .reduce((a,x)=>a+Number(x.valor||0),0);
@@ -1951,7 +1986,7 @@ R.bancos=v=>{
     '<div class="note">O saldo é o saldo inicial mais os movimentos dos extratos importados depois da data do saldo. Importe e concilie em Financeiro → Conciliação.</div>';
   document.getElementById('nv').onclick=()=>editRec('contas_bancarias',null);
   const el=document.getElementById('lst');
-  el.innerHTML=tbl([{l:'Conta',s:1,f:c=>esc(c.nome)},{l:'Banco',k:'banco'},
+  el.innerHTML=tbl([{l:'Conta',s:1,f:c=>'<span style="display:inline-flex;align-items:center;gap:9px">'+logoConta(c)+esc(c.nome)+'</span>'},{l:'Banco',k:'banco'},
     {l:'Agência / conta',f:c=>esc([c.agencia,c.numero].filter(Boolean).join(' / ')||'—')},{l:'Tipo',k:'tipo'}].concat(colUnid('contas_bancarias'),[
     {l:'A conciliar',n:1,f:c=>S.extrato.filter(e=>e.conta===c.id&&e.status==='Pendente').length},
     {l:'Último movimento',f:c=>dBR(S.extrato.filter(e=>e.conta===c.id).map(e=>e.data).sort().pop())},
@@ -1968,7 +2003,7 @@ R.conciliacao=v=>{
     document.getElementById('nc').onclick=()=>go('bancos');return;
   }
   if(!cs.some(c=>c.id===CONC.conta))CONC.conta=cs[0].id;
-  v.innerHTML='<div class="toolbar"><select id="cc">'+cs.map(c=>'<option value="'+c.id+'"'+(c.id===CONC.conta?' selected':'')+'>'+esc(rotConta(c))+'</option>').join('')+'</select>'+
+  v.innerHTML='<div class="toolbar"><span id="clg">'+logoConta(byId('contas_bancarias',CONC.conta),30)+'</span><select id="cc">'+cs.map(c=>'<option value="'+c.id+'"'+(c.id===CONC.conta?' selected':'')+'>'+esc(rotConta(c))+'</option>').join('')+'</select>'+
     '<select id="cs"><option value="Pendente">A conciliar</option><option value="Conciliado">Conciliados</option><option value="Ignorado">Ignorados</option><option value="">Todos</option></select></div>'+
     '<div class="kpis" id="ck"></div>'+
     '<div class="card"><div class="chead"><h2>Importar extrato</h2></div><div class="cbody">'+

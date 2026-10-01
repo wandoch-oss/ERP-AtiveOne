@@ -174,3 +174,8 @@ svg.ch{width:100%;height:auto;display:block}
   #view{padding:13px}
   .kpis{grid-template-columns:repeat(2,1fr)}
 }
+
+.blogo{width:28px;height:28px;border-radius:7px;object-fit:contain;background:#fff;border:1px solid var(--border);flex-shrink:0;display:inline-block}
+.logo-ini{display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:700;border:none}
+.logo-prev .blogo{width:44px;height:44px}
+.logo-vazio{font-size:11px;color:var(--faint)}
