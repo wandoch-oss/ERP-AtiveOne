@@ -820,7 +820,7 @@ function editorOrc(id){
     if(!trav)h+='<div style="display:flex;gap:8px;margin:10px 0"><button class="btn sec sm" id="addM">+ Material</button>'+
        '<button class="btn sec sm" id="addS">+ Serviço</button></div>';
     h+='<div class="scr"><table><thead><tr><th>Item</th><th>Nat.</th><th class="n">Qtd</th><th class="n">Custo un.</th>'+
-      '<th class="n">Venda un.</th><th class="n">Total</th><th class="n">Marg.</th><th></th></tr></thead><tbody>';
+      '<th class="n">Venda un.</th><th class="n">Total</th><th class="n">Marg.</th><th>Frente (proposta)</th><th></th></tr></thead><tbody>';
     (o.itens||[]).forEach((i,ix)=>{
       const q=Number(i.qtd||0),tv=q*Number(i.venda||0),tc=q*Number(i.custo||0);
       h+='<tr><td class="s">'+esc(i.desc)+'</td><td><span class="bg '+(i.nat==='Serviço'?'g-brand':'g-accent')+'">'+esc(i.nat)+'</span></td>'+
@@ -828,16 +828,17 @@ function editorOrc(id){
         '<td class="n"><input type="number" step="0.01" value="'+Number(i.custo||0)+'" data-ix="'+ix+'" data-f="custo" style="width:92px"></td>'+
         '<td class="n"><input type="number" step="0.01" value="'+Number(i.venda||0)+'" data-ix="'+ix+'" data-f="venda" style="width:92px"></td>'+
         '<td class="n s">'+money(tv)+'</td><td class="n">'+(tv?pct((tv-tc)/tv*100):'—')+'</td>'+
+        '<td><select data-ix="'+ix+'" data-f="frente" style="width:150px">'+OPT_FRENTE.map(f=>'<option'+(frenteDe(i)===f?' selected':'')+'>'+f+'</option>').join('')+'</select></td>'+
         '<td class="n"><button class="btn sec sm" data-rm="'+ix+'">×</button></td></tr>';
     });
     h+='</tbody><tfoot>'+
-      '<tr><td colspan="5">Material</td><td class="n">'+money(t.mat.v)+'</td><td class="n">'+(t.mat.v?pct((t.mat.v-t.mat.c)/t.mat.v*100):'—')+'</td><td></td></tr>'+
-      '<tr><td colspan="5">Serviço</td><td class="n">'+money(t.serv.v)+'</td><td class="n">'+(t.serv.v?pct((t.serv.v-t.serv.c)/t.serv.v*100):'—')+'</td><td></td></tr>'+
+      '<tr><td colspan="5">Material</td><td class="n">'+money(t.mat.v)+'</td><td class="n">'+(t.mat.v?pct((t.mat.v-t.mat.c)/t.mat.v*100):'—')+'</td><td></td><td></td></tr>'+
+      '<tr><td colspan="5">Serviço</td><td class="n">'+money(t.serv.v)+'</td><td class="n">'+(t.serv.v?pct((t.serv.v-t.serv.c)/t.serv.v*100):'—')+'</td><td></td><td></td></tr>'+
       '<tr><td colspan="5">Total do orçamento</td><td class="n">'+money(t.venda)+'</td><td class="n"><span class="bg '+
-        (t.margem<25?'g-red':t.margem<32?'g-amber':'g-green')+'">'+pct(t.margem)+'</span></td><td></td></tr>'+
+        (t.margem<25?'g-red':t.margem<32?'g-amber':'g-green')+'">'+pct(t.margem)+'</span></td><td></td><td></td></tr>'+
       '</tfoot></table></div>';
     if(t.margem<30&&t.venda>0)h+='<div class="note" style="color:var(--amber)">Margem abaixo de 30% — pela regra do BPM este orçamento exige aprovação antes do envio.</div>';
-    h+='<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'+(trav?
+    h+='<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn sec" id="gp">Gerar proposta</button>'+(trav?
       (o.venda?'<button class="btn sec" id="vv">Ver venda</button>':'')+
       (o.status==='Perdido'?'<button class="btn sec" id="ra">Reabrir orçamento</button>':''):
       '<button class="btn sec" id="sv">Salvar</button><button class="btn" id="cv">Converter em venda</button>'+
@@ -855,11 +856,12 @@ function editorOrc(id){
         if(op&&(op.estagio==='Lead'||op.estagio==='Visita técnica')){op.estagio='Proposta';put('oportunidades',op)}}
       put('orcamentos',o);if(k==='cliente'||k==='oportunidade')draw()});
     modal.querySelectorAll('[data-ix]').forEach(el=>el.onchange=()=>{
-      o.itens[Number(el.dataset.ix)][el.dataset.f]=Number(el.value);put('orcamentos',o);draw()});
+      o.itens[Number(el.dataset.ix)][el.dataset.f]=el.dataset.f==='frente'?el.value:Number(el.value);put('orcamentos',o);draw()});
     modal.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{o.itens.splice(Number(b.dataset.rm),1);put('orcamentos',o);draw()});
     const q=i=>document.getElementById(i);
     if(q('addM'))q('addM').onclick=()=>addItem('Material');
     if(q('addS'))q('addS').onclick=()=>addItem('Serviço');
+    if(q('gp'))q('gp').onclick=()=>gerarProposta(o.id);
     if(q('sv'))q('sv').onclick=()=>{put('orcamentos',o);closeM();toast('Orçamento salvo');render()};
     if(q('cv'))q('cv').onclick=()=>registrarVenda(o.id);
     if(q('pd'))q('pd').onclick=()=>perderOrc(o);
@@ -878,8 +880,9 @@ function editorOrc(id){
       const p=byId(col,document.getElementById('pick').value);
       const q=Number(document.getElementById('qtd').value||1);
       o.itens=o.itens||[];
-      o.itens.push({nat:nat,ref:p.id,desc:(ehKit(p)?'[Kit] ':'')+p.nome,qtd:q,
-        custo:nat==='Material'?custoProduto(p):Number(p.custo||0),venda:Number(p.venda||0)});
+      const novoItem={nat:nat,ref:p.id,desc:(ehKit(p)?'[Kit] ':'')+p.nome,qtd:q,
+        custo:nat==='Material'?custoProduto(p):Number(p.custo||0),venda:Number(p.venda||0)};
+      novoItem.frente=guessFrente(novoItem);o.itens.push(novoItem);
       put('orcamentos',o);draw();
     });
   };
