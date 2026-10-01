@@ -132,6 +132,18 @@ const bgFor=s=>({'Fechada':'g-green','Convertido':'g-green','Cancelada':'g-red',
 /* ---------- modal e formulários ---------- */
 const ovl=document.getElementById('ovl'), modal=document.getElementById('modal');
 let onSave=null;
+function ask(msg,okLabel){
+  return new Promise(res=>{
+    const d=document.createElement('div');
+    d.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:200';
+    d.innerHTML='<div style="background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:14px;max-width:440px;width:100%;padding:18px 18px 14px">'+
+      '<div style="white-space:pre-wrap;line-height:1.5;margin-bottom:16px;font-size:14px">'+esc(msg)+'</div>'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn sec" data-r="0">Cancelar</button><button class="btn" data-r="1" autofocus>'+esc(okLabel||'Confirmar')+'</button></div></div>';
+    const fim=v=>{d.remove();res(v)};
+    d.onclick=e=>{if(e.target===d)fim(false);const b=e.target.closest&&e.target.closest('[data-r]');if(b)fim(b.dataset.r==='1')};
+    document.body.appendChild(d);const ok=d.querySelector('[data-r="1"]');if(ok)ok.focus();
+  });
+}
 let posFechar=null;
 function closeM(){ovl.classList.remove('on');onSave=null;if(posFechar){const f=posFechar;posFechar=null;f()}}
 ovl.addEventListener('click',e=>{if(e.target===ovl)closeM()});
@@ -459,13 +471,13 @@ function editRec(col,id,after,preset){
   });
   if(sc.ligar)sc.ligar(modal);
   const b=document.getElementById('mDel');
-  if(b)b.onclick=()=>{if(confirm('Excluir definitivamente?')){del(col,id);toast('Excluído');fim()}};
+  if(b)b.onclick=async()=>{if(await ask('Excluir definitivamente?','Excluir')){del(col,id);toast('Excluído');fim()}};
   const c=document.getElementById('mCan');
-  if(c)c.onclick=()=>{
+  if(c)c.onclick=async()=>{
     if(ativo(rec)){
       const cen=col.startsWith('centros_'),kc=col==='centros_lucro'?'centro_lucro':'centro_custo';
       const uso=col==='canais'?S.oportunidades.filter(o=>o.canal===id).length:cen?S.obras.filter(o=>o[kc]===id).length:col==='servicos'?S.orcamentos.filter(o=>(o.itens||[]).some(i=>i.ref===id)).length:col==='categorias_servico'?S.servicos.filter(x=>x.categoria===id).length:S.produtos.filter(p=>p.familia===id||p.categoria===id).length;
-      if(!confirm('Cancelar "'+rec.nome+'"?'+(uso?' '+uso+(col==='canais'?' oportunidade(s)':cen?' projeto(s)':col==='servicos'?' orçamento(s)':col==='categorias_servico'?' serviço(s)':' produto(s)')+' usam este registro e continuam com ele, mas ele deixa de aparecer em novos cadastros.':'')))return;
+      if(!await ask('Cancelar "'+rec.nome+'"?'+(uso?' '+uso+(col==='canais'?' oportunidade(s)':cen?' projeto(s)':col==='servicos'?' orçamento(s)':col==='categorias_servico'?' serviço(s)':' produto(s)')+' usam este registro e continuam com ele, mas ele deixa de aparecer em novos cadastros.':'')))return;
       rec.status='Cancelada';
     }else rec.status='Ativa';
     put(col,rec);toast(rec.status==='Ativa'?'Reativado':'Cancelado');fim();
@@ -867,7 +879,7 @@ function editorOrc(id){
     if(q('pd'))q('pd').onclick=()=>perderOrc(o);
     if(q('vv'))q('vv').onclick=()=>abrirVenda(o.venda);
     if(q('ra'))q('ra').onclick=()=>{o.status='Enviado';o.motivo_perda='';put('orcamentos',o);toast('Orçamento reaberto');draw()};
-    if(q('rm'))q('rm').onclick=()=>{if(confirm('Excluir orçamento?')){del('orcamentos',o.id);closeM();render()}};
+    if(q('rm'))q('rm').onclick=async()=>{if(await ask('Excluir orçamento?','Excluir')){del('orcamentos',o.id);closeM();render()}};
   };
   const addItem=nat=>{
     const col=nat==='Material'?'produtos':'servicos';
@@ -1074,12 +1086,12 @@ function abrirVenda(id){
   const vc=document.getElementById('vCt');if(vc)vc.onclick=()=>abrirContratoVenda(cv.id);
   const ca=document.getElementById('vCa');if(ca)ca.onclick=()=>cancelarVenda(v);
 }
-function cancelarVenda(v){
+async function cancelarVenda(v){
   const ls=lancVenda(v).filter(l=>l.tipo==='Receber');
   const rec=ls.filter(l=>l.status==='Recebido');
   const obra=v.obra?byId('obras',v.obra):null;
   const execucao=obra&&(horasObra(obra.id)>0||custoMaterialObra(obra.id)>0);
-  if(!confirm('Cancelar '+v.numero+'?\n\n• Parcelas pendentes serão removidas'+(rec.length?'\n• '+money(rec.reduce((a,l)=>a+Number(l.valor||0),0))+' já recebidos continuam lançados — trate a devolução no Financeiro':'')+
+  if(!await ask('Cancelar '+v.numero+'?\n\n• Parcelas pendentes serão removidas'+(rec.length?'\n• '+money(rec.reduce((a,l)=>a+Number(l.valor||0),0))+' já recebidos continuam lançados — trate a devolução no Financeiro':'')+
     (obra?'\n• O projeto '+obra.codigo+' será cancelado e as reservas liberadas'+(execucao?' (atenção: ele já tem horas ou material lançados)':''):'\n• Os produtos baixados voltam ao estoque')+
     '\n• O contrato da venda será cancelado'+'\n• O orçamento volta para Enviado'))return;
   ls.filter(l=>l.status!=='Recebido').forEach(l=>del('financeiro',l.id));
@@ -1251,10 +1263,10 @@ function consumirMaterial(o,after){
   const f=[{k:'produto',l:'Produto ou kit',t:'ref',col:'produtos',req:1,filtro:ativo,rotulo:rotuloProd},
     {k:'local',l:'Sai de qual local',t:'ref',col:'locais',req:1},
     {k:'qtd',l:'Quantidade',t:'number',step:'0.01',req:1},{k:'data',l:'Data',t:'date',req:1}];
-  openM('Consumir material · '+o.codigo,formHtml(f,{data:hoje()}),'Baixar',d=>{
+  openM('Consumir material · '+o.codigo,formHtml(f,{data:hoje()}),'Baixar',async d=>{
     const kit=byId('produtos',d.produto), partes=explodir(d.produto,Math.abs(Number(d.qtd)));
     const faltas=partes.filter(c=>c.qtd>saldoProdLocal(c.produto,d.local));
-    if(faltas.length&&!confirm('Saldo insuficiente no local para: '+faltas.map(c=>nm('produtos',c.produto)).join(', ')+'. Registrar mesmo assim?'))return;
+    if(faltas.length&&!await ask('Saldo insuficiente no local para: '+faltas.map(c=>nm('produtos',c.produto)).join(', ')+'. Registrar mesmo assim?'))return;
     partes.forEach(c=>{const p=byId('produtos',c.produto);
       put('estoque',{produto:c.produto,local:d.local,qtd:-c.qtd,tipo:'Saída',data:d.data,obra:o.id,
         custo:Number((p&&p.custo)||0),doc:'Consumo '+o.codigo+(ehKit(kit)?' · '+kit.nome:'')})});
@@ -1306,10 +1318,10 @@ function novoAditivo(o,after){
     put('aditivos',d);closeM();obraTab='adt';toast('Aditivo registrado — aguardando aprovação');after();
   });
 }
-function aprovarAditivo(a,o,after){
+async function aprovarAditivo(a,o,after){
   const v=Number(a.valor||0),c=Number(a.custo_material||0)+Number(a.custo_mo||0);
   const m=v?(v-c)/v*100:-100;
-  if(m<30&&!confirm(v?'Margem do aditivo é '+pct(m)+', abaixo de 30%. Aprovar mesmo assim?':'Aditivo sem cobrança: '+money(c)+' de custo absorvido. Aprovar?'))return;
+  if(m<30&&!await ask(v?'Margem do aditivo é '+pct(m)+', abaixo de 30%. Aprovar mesmo assim?':'Aditivo sem cobrança: '+money(c)+' de custo absorvido. Aprovar?'))return;
   a.status='Aprovado';a.aprovado_em=hoje();put('aditivos',a);
   o.valor=Number(o.valor||0)+v;
   o.orcado_material=Number(o.orcado_material||0)+Number(a.custo_material||0);
@@ -1792,11 +1804,11 @@ function transferir(){
   const f=[{k:'produto',l:'Produto',t:'ref',col:'produtos',req:1,filtro:simplesAtivo,rotulo:rotuloProd},
     {k:'de',l:'De',t:'ref',col:'locais',req:1},{k:'para',l:'Para',t:'ref',col:'locais',req:1},
     {k:'qtd',l:'Quantidade',t:'number',step:'0.01',req:1},{k:'data',l:'Data',t:'date',req:1}];
-  openM('Transferir material',formHtml(f,{data:hoje()}),'Transferir',d=>{
+  openM('Transferir material',formHtml(f,{data:hoje()}),'Transferir',async d=>{
     if(d.de===d.para){toast('Origem e destino iguais');return}
     const p=byId('produtos',d.produto),c=Number((p&&p.custo)||0),q=Math.abs(Number(d.qtd));
     const disp=saldoProdLocal(d.produto,d.de);
-    if(q>disp&&!confirm('Saldo na origem é '+num(disp,2)+'. Transferir mesmo assim?'))return;
+    if(q>disp&&!await ask('Saldo na origem é '+num(disp,2)+'. Transferir mesmo assim?'))return;
     put('estoque',{produto:d.produto,local:d.de,qtd:-q,tipo:'Transferência',data:d.data,custo:c,doc:'→ '+nm('locais',d.para)});
     put('estoque',{produto:d.produto,local:d.para,qtd:q,tipo:'Transferência',data:d.data,custo:c,doc:'← '+nm('locais',d.de)});
     closeM();toast('Transferência registrada');render();
@@ -2517,10 +2529,10 @@ function editarProduto(id,after){
       if(ex)ex.qtd=Number(ex.qtd)+q;else p.componentes.push({produto:pid,qtd:q});draw()};
     const us=document.getElementById('usaSug');if(us)us.onclick=()=>{ler();p.venda=Math.round(vendaComponentes(p)*100)/100;draw()};
     const pc=document.getElementById('pCan');
-    if(pc)pc.onclick=()=>{
+    if(pc)pc.onclick=async()=>{
       if(ativo(p)){
         const emKits=S.produtos.filter(k=>ehKit(k)&&ativo(k)&&(k.componentes||[]).some(c=>c.produto===p.id));
-        if(!confirm('Cancelar este produto? Ele deixa de aparecer em orçamentos e movimentações novas, mas o histórico é mantido.'+
+        if(!await ask('Cancelar este produto? Ele deixa de aparecer em orçamentos e movimentações novas, mas o histórico é mantido.'+
           (emKits.length?' Atenção: ele faz parte de '+emKits.length+' kit(s) ativo(s).':'')))return;
         orig.status='Cancelado';
       }else orig.status='Ativo';
@@ -2630,7 +2642,7 @@ function renderAnexos(el,cfg){
       arr.push(Object.assign({id:uid(),nome:f.name,enviado_em:hoje()},r));cfg.salvar(arr);toast('Arquivo anexado');cfg.depois()}
     catch(e){up.disabled=false;m.textContent=erroUpload(e)}};
   el.querySelectorAll('[data-axr]').forEach(b=>b.onclick=async()=>{const arr=cfg.lista()||[],d=arr.find(x=>x.id===b.dataset.axr);
-    if(!d||!confirm('Remover "'+d.nome+'"? O arquivo será apagado.'))return;
+    if(!d||!await ask('Remover "'+d.nome+'"? O arquivo será apagado.'))return;
     await removerArquivo(d);cfg.salvar(arr.filter(x=>x.id!==d.id));toast('Arquivo removido');cfg.depois()});
 }
 let empTab='dados';
@@ -2721,20 +2733,20 @@ function editarEmpresa(id,after,aba){
       }catch(err){up.disabled=false;msg.textContent=erroUpload(err)}
     };
     modal.querySelectorAll('[data-rd]').forEach(b=>b.onclick=async()=>{
-      const d=orig.documentos.find(x=>x.id===b.dataset.rd);if(!d||!confirm('Remover "'+d.tipo+' · '+d.nome+'"? O arquivo será apagado.'))return;
+      const d=orig.documentos.find(x=>x.id===b.dataset.rd);if(!d||!await ask('Remover "'+d.tipo+' · '+d.nome+'"? O arquivo será apagado.'))return;
       await removerArquivo(d);orig.documentos=orig.documentos.filter(x=>x.id!==d.id);
       put('empresas',orig);e.documentos=orig.documentos.slice();toast('Documento removido');draw();
     });
     const ca=document.getElementById('eCa');
-    if(ca)ca.onclick=()=>{
+    if(ca)ca.onclick=async()=>{
       if(ativo(orig)){
         const fil=S.empresas.filter(x=>x.matriz===orig.id&&ativo(x)).length;
-        if(!confirm('Cancelar '+nomeEmp(orig)+'?'+(fil?' Ela tem '+fil+' filial(is) ativa(s), que continuarão ativas.':'')+' Os dados e documentos são mantidos.'))return;
+        if(!await ask('Cancelar '+nomeEmp(orig)+'?'+(fil?' Ela tem '+fil+' filial(is) ativa(s), que continuarão ativas.':'')+' Os dados e documentos são mantidos.'))return;
         orig.status='Cancelada';
       }else orig.status='Ativa';
       put('empresas',orig);toast(orig.status==='Ativa'?'Empresa reativada':'Empresa cancelada');fim();
     };
-    document.getElementById('eSv').onclick=()=>{
+    document.getElementById('eSv').onclick=async()=>{
       if(empTab!=='docs')ler();
       e.razao_social=String(e.razao_social||'').trim();e.cnpj=fmtCNPJ(e.cnpj);
       if(!e.razao_social){empTab='dados';draw();toast('Informe a razão social');return}
@@ -2746,7 +2758,7 @@ function editarEmpresa(id,after,aba){
       if(e.tipo==='Filial'){const m=byId('empresas',e.matriz);
         if(m&&soDig(m.cnpj).slice(0,8)!==c.slice(0,8))av.push('A raiz do CNPJ (8 primeiros dígitos) é diferente da matriz.');
         if(c.slice(8,12)==='0001')av.push('CNPJ /0001 normalmente é de matriz.')}
-      if(av.length&&!confirm(av.join('\n')+'\n\nSalvar mesmo assim?'))return;
+      if(av.length&&!await ask(av.join('\n')+'\n\nSalvar mesmo assim?'))return;
       if(orig)e.documentos=orig.documentos||[];
       const novo=!orig, rec=put('empresas',e);
       if(novo){toast('Empresa salva — agora anexe os documentos');editarEmpresa(rec.id,after,'docs')}else{toast('Empresa salva');fim()}
@@ -2784,7 +2796,7 @@ R.cadastros=v=>{
     if(cadTab.startsWith('centros_')){centrosPadrao();toast('Centros padrão carregados');render();return}
     const n=listaPadrao();toast('Famílias e categorias padrão carregadas'+(n?' · '+n+' produto(s) convertidos':''));render()};
   const fc=document.getElementById('fCa');if(fc)fc.onchange=()=>{verCancelados=fc.checked;render()};
-  document.getElementById('demo').onclick=()=>{if(confirm('Carregar um conjunto de dados de exemplo?'))seedDemo()};
+  document.getElementById('demo').onclick=async()=>{if(await ask('Carregar um conjunto de dados de exemplo?'))seedDemo()};
   document.getElementById('exp').onclick=()=>{
     const d={};COLS.forEach(c=>d[c]=S[c]);
     baixarArquivo('ative-one-backup-'+hoje()+'.json',JSON.stringify(d,null,1));
@@ -2792,16 +2804,16 @@ R.cadastros=v=>{
   document.getElementById('imp').onclick=()=>document.getElementById('fimp').click();
   document.getElementById('fimp').onchange=e=>{
     const f=e.target.files[0];if(!f)return;
-    f.text().then(t=>{
+    f.text().then(async t=>{
       let d;try{d=JSON.parse(t)}catch(x){toast('Arquivo inválido');return}
       const cs=COLS.filter(c=>Array.isArray(d[c]));
       if(!cs.length){toast('Nenhum dado do Ative One nesse arquivo');return}
       const n=cs.reduce((a,c)=>a+d[c].length,0);
-      if(!confirm('Substituir os dados atuais por '+n+' registros do backup?'))return;
+      if(!await ask('Substituir os dados atuais por '+n+' registros do backup?'))return;
       cs.forEach(c=>{S[c]=d[c];save(c)});toast(n+' registros importados');render();
     });
   };
-  document.getElementById('zap').onclick=()=>{if(confirm('Apagar TODOS os registros? Não há como desfazer.')){
+  document.getElementById('zap').onclick=async()=>{if(await ask('Apagar TODOS os registros? Não há como desfazer.')){
     COLS.forEach(c=>{S[c]=[];save(c)});toast('Base zerada');render()}};
   const el=document.getElementById('lst');
   const C={
@@ -3084,7 +3096,7 @@ async function bootFirebase(cfg){
   firebase.initializeApp(cfg);
   FB=firebase.firestore();MODE='firebase';
   const st=document.getElementById('stat');st.style.cursor='pointer';
-  st.onclick=()=>{if(firebase.auth().currentUser&&confirm('Sair do Ative One?'))firebase.auth().signOut()};
+  st.onclick=async()=>{if(firebase.auth().currentUser&&await ask('Sair do Ative One?'))firebase.auth().signOut()};
   firebase.auth().onAuthStateChanged(u=>u?iniciarSessao(u):telaLogin());
 }
 function telaLogin(){
