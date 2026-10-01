@@ -1,6 +1,6 @@
 /* ---------- estado e persistência ---------- */
 const COLS=['clientes','oportunidades','orcamentos','obras','os','agenda','contratos','apontamentos',
-'produtos','servicos','locais','estoque','compras','fornecedores','financeiro','nfe','campanhas',
+'produtos','servicos','categorias_servico','locais','estoque','compras','fornecedores','financeiro','nfe','campanhas',
 'concorrentes','contas_bancarias','extrato','colaboradores','ajustes','reservas','aditivos','familias','categorias','vendas','canais','empresas','centros_lucro','centros_custo'];
 const S={}; COLS.forEach(c=>S[c]=[]);
 let DB=null, DL=null, FB=null, ASSETS=null, MODE='local', pend={};
@@ -242,6 +242,22 @@ function wireTable(el,col,opts){
   if(opts.onRow)el.querySelectorAll('tr.clk').forEach(t=>t.onclick=()=>opts.onRow(t.dataset.id));
 }
 /* ---------- esquemas ---------- */
+const CATEGORIAS_SERVICO_PADRAO=['Instalação','Manutenção','Programação e comissionamento','Projeto e consultoria','Suporte técnico','Treinamento'];
+function proxCodigoServ(){let n=S.servicos.length+1;const ex=new Set(S.servicos.map(x=>String(x.codigo||'').toLowerCase()));
+  while(ex.has('srv-'+String(n).padStart(3,'0')))n++;return 'SRV-'+String(n).padStart(3,'0')}
+function validarServico(d){
+  d.codigo=String(d.codigo||'').trim();
+  let l=soDig(d.cod_lc116);
+  if(l){if(l.length===3)l='0'+l;if(l.length!==4)return 'O código LC 116 tem o formato 14.01 (item e subitem).';d.cod_lc116=l.slice(0,2)+'.'+l.slice(2)}
+  else d.cod_lc116='';
+  d.cnae=soDig(d.cnae);if(d.cnae&&d.cnae.length!==7)return 'O CNAE precisa ter 7 dígitos.';
+  if(Number(d.iss_aliq)<0||Number(d.iss_aliq)>5)return 'A alíquota de ISS fica entre 0% e 5%.';
+  const mn=Number(d.preco_min),mx=Number(d.preco_max),v=Number(d.venda);
+  if(mn&&mx&&mn>mx)return 'O preço mínimo não pode passar do máximo.';
+  if(v&&((mn&&v<mn)||(mx&&v>mx)))return 'O preço padrão está fora da faixa de mínimo e máximo.';
+  if(Number(d.margem_min)<0||Number(d.margem_min)>=100)return 'A margem mínima fica entre 0% e 100%.';
+  return '';
+}
 const SCH={
  clientes:{t:'Cliente',f:[
    {t:'secao',l:'Dados básicos'},
@@ -260,9 +276,28 @@ const SCH={
    {k:'categoria',l:'Categoria'},{k:'unidade',l:'Unidade'},
    {k:'custo',l:'Custo (R$)',t:'money'},{k:'venda',l:'Preço de venda (R$)',t:'money'},
    {k:'minimo',l:'Estoque mínimo',t:'number',step:'1'},{k:'fornecedor',l:'Fornecedor padrão',t:'ref',col:'fornecedores'}]},
- servicos:{t:'Serviço',f:[
-   {k:'nome',l:'Descrição',req:1},{k:'unidade',l:'Unidade',t:'select',opts:['hora','verba','ponto','m²']},
-   {k:'custo',l:'Custo unitário (R$)',t:'money'},{k:'venda',l:'Venda unitária (R$)',t:'money'}]},
+ servicos:{t:'Serviço',cancelavel:1,unico:['codigo'],validar:validarServico,f:[
+   {t:'secao',l:'Dados básicos e de identificação'},
+   {k:'codigo',l:'Código / ID (único)',req:1},{k:'nome',l:'Nome / título',req:1},
+   {k:'categoria',l:'Categoria / grupo',t:'ref',col:'categorias_servico',filtro:r=>ativo(r)},
+   {k:'unidade',l:'Unidade de medida (como é cobrado)',t:'select',opts:['hora','dia','visita','ponto','unidade','projeto','mês','m²','verba'],req:1},
+   {k:'descricao',l:'Descrição interna (o que o serviço inclui)',t:'textarea'},
+   {k:'descricao_nf',l:'Descrição para o cliente / nota fiscal',t:'textarea'},
+   {t:'secao',l:'Dados comerciais e operacionais',nota:'Serviço não controla estoque: não entra em movimentação nem em saldo.'},
+   {k:'custo',l:'Custo unitário (R$)',t:'money'},{k:'venda',l:'Preço / valor padrão (R$)',t:'money'},
+   {k:'preco_min',l:'Preço mínimo (R$)',t:'money'},{k:'preco_max',l:'Preço máximo (R$)',t:'money'},
+   {k:'margem_min',l:'Margem mínima (%)',t:'number',step:'0.1'},{t:'vazio'},
+   {k:'prazo',l:'Tempo estimado / prazo',t:'number',step:'0.5'},{k:'prazo_un',l:'Prazo em',t:'select',opts:['horas','dias','semanas','meses']},
+   {k:'comissao_tipo',l:'Comissão',t:'select',opts:['Sem comissão','Percentual','Valor fixo']},{k:'comissao_valor',l:'Valor da comissão (% ou R$)',t:'number',step:'0.01'},
+   {t:'secao',l:'Dados fiscais (NFS-e)',nota:'Confirme os códigos com o contador e com a prefeitura do município que emite a nota.'},
+   {k:'cod_lc116',l:'Código do serviço (LC 116), ex.: 14.01'},{k:'cnae',l:'CNAE relacionado (7 dígitos)'},
+   {k:'cod_trib_mun',l:'Código de tributação municipal'},{k:'iss_aliq',l:'Alíquota de ISS (%)',t:'number',step:'0.01'},
+   {k:'iss_trat',l:'Tratamento do ISS',t:'select',opts:['Tributado no município','Retido pelo tomador','Isento','Imune','Suspenso'],full:1},
+   {t:'secao',l:'Integrações e contabilidade'},
+   {k:'conta_contabil',l:'Conta contábil de receita',full:1},campoCL,campoCC,
+   {k:'gera_os',l:'Gera ordem de serviço',t:'select',opts:['Sim','Não']},{k:'tipo_os',l:'Tipo de OS padrão',t:'select',opts:['Instalação','Manutenção preventiva','Corretiva','Garantia','Visita técnica','Treinamento']},
+   {k:'equipe',l:'Técnicos necessários',t:'number',step:'1'},{k:'funcao_exigida',l:'Função / perfil exigido'}]},
+ categorias_servico:{t:'Categoria de serviço',fem:1,cancelavel:1,f:[{k:'nome',l:'Nome',req:1},{k:'descricao',l:'Descrição'}]},
  colaboradores:{t:'Colaborador',f:[
    {k:'nome',l:'Nome',req:1},{k:'funcao',l:'Função'},
    {k:'custo_hora',l:'Custo/hora (R$)',t:'money'},{k:'capacidade',l:'Horas/semana',t:'number',step:'1'}]},
@@ -373,6 +408,7 @@ function editRec(col,id,after,preset){
   if(col==='contratos'){const base=id?byId(col,id):(preset||{});
     if(base&&base.tipo==='Fornecedor')sc=SCH.contratos_forn;else if(base&&base.subtipo==='Venda')sc=SCH.contratos_venda;
     preset=Object.assign({tipo:(base&&base.tipo)||'Cliente'},(base&&base.tipo==='Fornecedor')||(base&&base.subtipo)?{}:{subtipo:'Manutenção'},preset||{})}
+  if(col==='servicos'&&!id)preset=Object.assign({codigo:proxCodigoServ(),unidade:'hora',gera_os:'Sim',comissao_tipo:'Sem comissão',prazo_un:'horas'},preset||{});
   if(col==='os'&&!id)preset=Object.assign({cobranca:'Sob demanda',status:'Agendada',data:hoje()},preset||{});
   if(!id&&sc.f.some(f=>f.k==='empresa')){preset=Object.assign({empresa:UNID||empresaPadrao()},preset||{})}
   const rec=id?byId(col,id):(preset||{});
@@ -381,11 +417,13 @@ function editRec(col,id,after,preset){
   if(id)extra='<div style="margin-top:6px">'+(sc.cancelavel?
     '<button class="btn '+(ativo(rec)?'dgr':'sec')+' sm" id="mCan">'+(ativo(rec)?'Cancelar '+sc.t.toLowerCase():'Reativar')+'</button>':
     '<button class="btn dgr sm" id="mDel">Excluir registro</button>')+'</div>';
-  openM((id?'Editar ':(sc.fem?'Nova ':'Novo '))+sc.t.toLowerCase(),formHtml(sc.f,rec)+extra,'Salvar',d=>{
+  openM((id?'Editar ':(sc.fem?'Nova ':'Novo '))+sc.t.toLowerCase(),formHtml(sc.f,col==='servicos'&&id&&!rec.codigo?Object.assign({},rec,{codigo:proxCodigoServ()}):rec)+extra,'Salvar',d=>{
     if(sc.cancelavel){
       const ch=sc.unico||['nome'],norm=v=>String(v||'').trim().toLowerCase();
-      const dup=S[col].find(x=>x.id!==d.id&&ch.every(k=>norm(x[k])===norm(d[k])));
-      if(dup){toast(ativo(dup)?'Já existe '+sc.t.toLowerCase()+' com esse nome':'Esse nome existe mas está cancelado — reative-o');return}
+      if(sc.validar){const m=sc.validar(d);if(m){toast(m);return}}
+      const dup=ch.every(k=>norm(d[k]))&&S[col].find(x=>x.id!==d.id&&ch.every(k=>norm(x[k])===norm(d[k])));
+      const rotCh=((sc.f.find(f=>f.k===ch[0])||{}).l||'nome').toLowerCase().replace(/ \(.*\)/,'');
+      if(dup){toast(ativo(dup)?'Já existe '+sc.t.toLowerCase()+' com esse '+rotCh:'Esse nome existe mas está cancelado — reative-o');return}
       d.nome=String(d.nome).trim();d.status=rec.status||'Ativa';
     }
     put(col,Object.assign({},id?rec:(preset||{}),d));toast('Salvo');fim();
@@ -396,8 +434,8 @@ function editRec(col,id,after,preset){
   if(c)c.onclick=()=>{
     if(ativo(rec)){
       const cen=col.startsWith('centros_'),kc=col==='centros_lucro'?'centro_lucro':'centro_custo';
-      const uso=col==='canais'?S.oportunidades.filter(o=>o.canal===id).length:cen?S.obras.filter(o=>o[kc]===id).length:S.produtos.filter(p=>p.familia===id||p.categoria===id).length;
-      if(!confirm('Cancelar "'+rec.nome+'"?'+(uso?' '+uso+(col==='canais'?' oportunidade(s)':cen?' projeto(s)':' produto(s)')+' usam este registro e continuam com ele, mas ele deixa de aparecer em novos cadastros.':'')))return;
+      const uso=col==='canais'?S.oportunidades.filter(o=>o.canal===id).length:cen?S.obras.filter(o=>o[kc]===id).length:col==='servicos'?S.orcamentos.filter(o=>(o.itens||[]).some(i=>i.ref===id)).length:col==='categorias_servico'?S.servicos.filter(x=>x.categoria===id).length:S.produtos.filter(p=>p.familia===id||p.categoria===id).length;
+      if(!confirm('Cancelar "'+rec.nome+'"?'+(uso?' '+uso+(col==='canais'?' oportunidade(s)':cen?' projeto(s)':col==='servicos'?' orçamento(s)':col==='categorias_servico'?' serviço(s)':' produto(s)')+' usam este registro e continuam com ele, mas ele deixa de aparecer em novos cadastros.':'')))return;
       rec.status='Cancelada';
     }else rec.status='Ativa';
     put(col,rec);toast(rec.status==='Ativa'?'Reativado':'Cancelado');fim();
@@ -2668,17 +2706,17 @@ function editarEmpresa(id,after,aba){
 /* ---------- cadastros ---------- */
 let cadTab='empresas';
 R.cadastros=v=>{
-  const abas=[['empresas','Empresas'],['centros_lucro','Centros de lucro'],['centros_custo','Centros de custo'],['produtos','Produtos'],['familias','Famílias'],['categorias','Categorias'],['servicos','Serviços'],
+  const abas=[['empresas','Empresas'],['centros_lucro','Centros de lucro'],['centros_custo','Centros de custo'],['produtos','Produtos'],['familias','Famílias'],['categorias','Categorias'],['servicos','Serviços'],['categorias_servico','Categorias de serviço'],
     ['colaboradores','Equipe'],['locais','Locais de estoque'],['fornecedores','Fornecedores']];
-  const rotNovo={empresas:'+ Nova empresa',centros_lucro:'+ Novo centro de lucro',centros_custo:'+ Novo centro de custo',produtos:'+ Novo produto',familias:'+ Nova família',categorias:'+ Nova categoria',servicos:'+ Novo serviço',
+  const rotNovo={empresas:'+ Nova empresa',centros_lucro:'+ Novo centro de lucro',centros_custo:'+ Novo centro de custo',produtos:'+ Novo produto',familias:'+ Nova família',categorias:'+ Nova categoria',servicos:'+ Novo serviço',categorias_servico:'+ Nova categoria de serviço',
     colaboradores:'+ Novo colaborador',locais:'+ Novo local',fornecedores:'+ Novo fornecedor'};
   v.innerHTML='<div class="tabs">'+abas.map(a=>'<button class="tab'+(cadTab===a[0]?' on':'')+'" data-tab="'+a[0]+'">'+a[1]+'</button>').join('')+'</div>'+
     '<div class="toolbar"><button class="btn" id="nv">'+rotNovo[cadTab]+'</button>'+
     (cadTab==='produtos'?'<select id="fTp"><option value="">Simples e kits</option><option>Simples</option><option>Kit</option></select>'+
       '<select id="fFm"><option value="">Todas as famílias</option>'+S.familias.map(f=>'<option value="'+f.id+'">'+esc(f.nome)+'</option>').join('')+'</select>'+
       '<input type="text" id="fBu" placeholder="Buscar SKU ou descrição…">':'')+
-    ((['familias','categorias','centros_lucro','centros_custo'].includes(cadTab))?'<button class="btn sec sm" id="padrao">Carregar lista padrão</button>':'')+
-    ((['empresas','centros_lucro','centros_custo','produtos','familias','categorias'].includes(cadTab))?'<label style="font-size:12.5px;color:var(--dim);display:flex;gap:6px;align-items:center">'+
+    ((['familias','categorias','centros_lucro','centros_custo','categorias_servico'].includes(cadTab))?'<button class="btn sec sm" id="padrao">Carregar lista padrão</button>':'')+
+    ((['empresas','centros_lucro','centros_custo','produtos','familias','categorias','servicos','categorias_servico'].includes(cadTab))?'<label style="font-size:12.5px;color:var(--dim);display:flex;gap:6px;align-items:center">'+
       '<input type="checkbox" id="fCa"'+(verCancelados?' checked':'')+'> mostrar cancelados</label>':'')+'</div>'+
     '<div class="card"><div class="cbody" id="lst"></div></div>'+
     '<div class="card"><div class="chead"><h2>Dados</h2></div><div class="cbody">'+
@@ -2690,7 +2728,8 @@ R.cadastros=v=>{
   v.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{cadTab=b.dataset.tab;render()});
   document.getElementById('nv').onclick=()=>editRec(cadTab,null);
   const pd=document.getElementById('padrao');
-  if(pd)pd.onclick=()=>{if(cadTab.startsWith('centros_')){centrosPadrao();toast('Centros padrão carregados');render();return}
+  if(pd)pd.onclick=()=>{if(cadTab==='categorias_servico'){CATEGORIAS_SERVICO_PADRAO.forEach(n=>{if(!S.categorias_servico.some(x=>String(x.nome).toLowerCase()===n.toLowerCase()))put('categorias_servico',{nome:n,status:'Ativa'})});toast('Categorias padrão carregadas');render();return}
+    if(cadTab.startsWith('centros_')){centrosPadrao();toast('Centros padrão carregados');render();return}
     const n=listaPadrao();toast('Famílias e categorias padrão carregadas'+(n?' · '+n+' produto(s) convertidos':''));render()};
   const fc=document.getElementById('fCa');if(fc)fc.onchange=()=>{verCancelados=fc.checked;render()};
   document.getElementById('demo').onclick=()=>{if(confirm('Carregar um conjunto de dados de exemplo?'))seedDemo()};
@@ -2743,8 +2782,15 @@ R.cadastros=v=>{
     categorias:[{l:'Categoria',k:'nome',s:1},{l:'Descrição',k:'descricao'},
       {l:'Produtos',n:1,f:r=>S.produtos.filter(p=>p.categoria===r.id).length},
       {l:'Status',f:r=>'<span class="bg '+(ativo(r)?'g-green':'g-red')+'">'+(ativo(r)?'Ativa':'Cancelada')+'</span>'}],
-    servicos:[{l:'Descrição',k:'nome',s:1},{l:'Unidade',k:'unidade'},{l:'Custo',n:1,f:r=>money(r.custo)},
-      {l:'Venda',n:1,f:r=>money(r.venda)},{l:'Margem',n:1,f:r=>Number(r.venda)?pct((r.venda-r.custo)/r.venda*100):'—'}],
+    servicos:[{l:'Código',k:'codigo'},{l:'Serviço',k:'nome',s:1},{l:'Categoria',f:r=>esc(nomeClass('categorias_servico',r.categoria))},{l:'Unidade',k:'unidade'},
+      {l:'Custo',n:1,f:r=>money(r.custo)},{l:'Venda',n:1,f:r=>money(r.venda)},
+      {l:'Margem',n:1,f:r=>Number(r.venda)?pct((r.venda-r.custo)/r.venda*100):'—'},
+      {l:'Prazo',f:r=>r.prazo?esc(num(r.prazo,1)+' '+(r.prazo_un||'')):'—'},
+      {l:'ISS',n:1,f:r=>r.iss_aliq?pct(r.iss_aliq):'—'},
+      {l:'Status',f:r=>'<span class="bg '+(ativo(r)?'g-green':'g-red')+'">'+(ativo(r)?'Ativo':'Cancelado')+'</span>'}],
+    categorias_servico:[{l:'Categoria',k:'nome',s:1},{l:'Descrição',k:'descricao'},
+      {l:'Serviços',n:1,f:r=>S.servicos.filter(x=>x.categoria===r.id).length},
+      {l:'Status',f:r=>'<span class="bg '+(ativo(r)?'g-green':'g-red')+'">'+(ativo(r)?'Ativa':'Cancelada')+'</span>'}],
     colaboradores:[{l:'Nome',k:'nome',s:1},{l:'Função',k:'funcao'},{l:'Custo/hora',n:1,f:r=>money(r.custo_hora)},
       {l:'Horas/semana',n:1,k:'capacidade'},{l:'Horas lançadas',n:1,f:r=>num(S.apontamentos.filter(a=>a.colaborador===r.id).reduce((a,x)=>a+Number(x.horas||0),0),1)}],
     locais:[{l:'Local',k:'nome',s:1},{l:'Tipo',f:r=>'<span class="bg g-accent">'+esc(r.tipo)+'</span>'},
@@ -2755,7 +2801,7 @@ R.cadastros=v=>{
   };
   const desenhar=()=>{
     let rows=S[cadTab].slice();
-    if(['empresas','centros_lucro','centros_custo','produtos','familias','categorias'].includes(cadTab)){
+    if(['empresas','centros_lucro','centros_custo','produtos','familias','categorias','servicos','categorias_servico'].includes(cadTab)){
       if(!verCancelados)rows=rows.filter(ativo);
       rows.sort((a,b)=>(ativo(b)-ativo(a))||String(a.nome).localeCompare(String(b.nome)));
     }
