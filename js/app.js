@@ -535,7 +535,7 @@ function editRec(col,id,after,preset){
 /* ---------- navegação ---------- */
 const NAV=[
  {g:'',i:[['painel','Painel','◧']]},
- {g:'Marketing',i:[['canais','Canais','⌁'],['campanhas','Campanhas','✦'],['marketing','Resultados','◈'],['concorrentes','Concorrência','◐']]},
+ {g:'Marketing',i:[['canais','Canais','⌁'],['campanhas','Campanhas','✦'],['parcerias','Parcerias','⚭'],['marketing','Resultados','◈'],['concorrentes','Concorrência','◐']]},
  {g:'Comercial',i:[['clientes','Clientes','◎'],['oportunidades','Oportunidades','↗'],['orcamentos','Orçamentos','▤'],['vendas','Vendas','✓']]},
  {g:'Operação',i:[['obras','Projetos','⌂'],['os','Ordens de serviço','☎'],['agenda','Agenda','▦']]},
  {g:'Compras',i:[['compras','Pedido de Compra','⇄'],['estoque','Estoque','▣']]},
@@ -546,14 +546,14 @@ const NAV=[
 const SUB={painel:'Visão geral da operação',clientes:'Base, histórico e rentabilidade',
  oportunidades:'Funil comercial por estágio',orcamentos:'Orçamentos híbridos: material + serviço',
  vendas:'Vendas negociadas e fechadas',marketing:'Retorno por canal de relacionamento',
- campanhas:'Campanhas, investimento e leads',canais:'Canais de relacionamento online e offline',
+ campanhas:'Campanhas, investimento e leads',parcerias:'Arquitetos, designers e indicadores',canais:'Canais de relacionamento online e offline',
  concorrentes:'Monitoramento da concorrência',obras:'Execução, resultado até a entrega e pós-venda',
  os:'Ordens de serviço, garantia e retrabalho',agenda:'Calendário e capacidade da equipe',
  contratos:'Manutenção recorrente e SLA',estoque:'Multilocal: almoxarifado, técnico e obra',
  compras:'Pedidos, fornecedores e importação de XML',financeiro:'Contas a pagar e a receber',
  bancos:'Contas bancárias e saldos',conciliacao:'Importação de extratos e conciliação bancária',
  dre_contabil:'Resultado contábil a partir do plano gerencial vinculado',fluxo:'Projeção unificada de entradas e saídas',dre:'Resultado gerencial por vertical',
- cadastros:'Produtos, serviços, equipe e locais'};
+ cadastros:'Empresas, financeiro, produtos, serviços, pessoas e compras'};
 let route='painel';
 function go(k){route=k;if(k==='cadastros')cadTab='empresas';document.getElementById('side').classList.remove('open');render();window.scrollTo(0,0)}
 function drawNav(){
@@ -2829,18 +2829,46 @@ function editarEmpresa(id,after,aba){
 
 /* ---------- cadastros ---------- */
 let cadTab='empresas';
+const COLS_PARCEIROS=[{l:'Nome',k:'nome',s:1},{l:'Tipo',f:r=>'<span class="bg g-purple">'+esc(r.tipo||'—')+'</span>'},
+      {l:'Escritório / empresa',k:'empresa_nome'},{l:'Contato',f:r=>esc([r.contato,r.telefone].filter(Boolean).join(' · ')||'—')},
+      {l:'Comissão',f:r=>esc(rotComissao(r))},
+      {l:'Indicações',n:1,f:r=>S.oportunidades.filter(o=>o.parceiro===r.id).length},
+      {l:'Vendas',n:1,f:r=>{const c=comissaoDe(r,vendasDoParceiro(r.id));return c.n?c.n+' · '+money(c.base):'—'}},
+      {l:'Comissão estimada',n:1,f:r=>{const c=comissaoDe(r,vendasDoParceiro(r.id));return c.comissao?money(c.comissao):'—'}},
+      {l:'Status',f:r=>'<span class="bg '+(ativo(r)?'g-green':'g-red')+'">'+(ativo(r)?'Ativo':'Cancelado')+'</span>'}];
+R.parcerias=v=>{
+  const ps=S.parceiros.filter(p=>verCancelados||ativo(p)).sort((a,b)=>(ativo(b)-ativo(a))||String(a.nome).localeCompare(String(b.nome)));
+  const at=S.parceiros.filter(ativo),ind=S.oportunidades.filter(o=>o.parceiro&&at.some(p=>p.id===o.parceiro)).length;
+  const vendas=at.reduce((a,p)=>a+comissaoDe(p,vendasDoParceiro(p.id)).base,0),com=at.reduce((a,p)=>a+comissaoDe(p,vendasDoParceiro(p.id)).comissao,0);
+  v.innerHTML='<div class="kpis">'+kpi('Parceiros ativos',at.length)+kpi('Indicações',ind)+kpi('Vendas por indicação',money(vendas))+kpi('Comissão estimada',money(com))+'</div>'+
+    '<div class="toolbar"><button class="btn" id="nv">+ Novo parceiro</button><label style="font-size:12.5px;color:var(--dim);display:flex;gap:6px;align-items:center">'+
+    '<input type="checkbox" id="fCa"'+(verCancelados?' checked':'')+'> mostrar cancelados</label></div>'+
+    '<div class="card"><div class="cbody" id="lst"></div></div>'+
+    '<div class="note">Arquitetos, designers, engenheiros, construtoras, integradores e indicadores. A comissão estimada é só referência: a negociação vale venda a venda e o pagamento é lançado em Financeiro, na conta 4.2.02 do plano gerencial.</div>';
+  document.getElementById('nv').onclick=()=>editRec('parceiros',null);
+  document.getElementById('fCa').onchange=e=>{verCancelados=e.target.checked;render()};
+  const el=document.getElementById('lst');
+  el.innerHTML=tbl(COLS_PARCEIROS,ps,{acts:1,empty:'Nenhum parceiro cadastrado. Cadastre o primeiro para ligá-lo às oportunidades.'});
+  wireTable(el,'parceiros');
+};
 R.cadastros=v=>{
-  const abas=[['empresas','Empresas'],['centros_lucro','Centros de lucro'],['centros_custo','Centros de custo'],['plano_gerencial','Plano gerencial'],['plano_contas','Plano contábil'],['produtos','Produtos'],['familias','Famílias'],['categorias','Categorias'],['servicos','Serviços'],['categorias_servico','Categorias de serviço'],
-    ['colaboradores','Equipe'],['parceiros','Parceiros'],['locais','Locais de estoque'],['fornecedores','Fornecedores']];
+  const GRUPOS=[['Empresas',[['empresas','Empresas']]],
+    ['Financeiro',[['centros_lucro','Centros de lucro'],['centros_custo','Centros de custo'],['plano_gerencial','Plano gerencial'],['plano_contas','Plano contábil']]],
+    ['Produtos',[['produtos','Produtos'],['familias','Famílias'],['categorias','Categorias']]],
+    ['Serviços',[['servicos','Serviços'],['categorias_servico','Categorias de serviço']]],
+    ['Pessoas',[['colaboradores','Equipe']]],
+    ['Compras',[['fornecedores','Fornecedores'],['locais','Locais de estoque']]]];
+  const grupoAtual=GRUPOS.find(g=>g[1].some(x=>x[0]===cadTab))||GRUPOS[0];
   const rotNovo={empresas:'+ Nova empresa',centros_lucro:'+ Novo centro de lucro',centros_custo:'+ Novo centro de custo',plano_gerencial:'+ Nova conta gerencial',plano_contas:'+ Nova conta contábil',produtos:'+ Novo produto',familias:'+ Nova família',categorias:'+ Nova categoria',servicos:'+ Novo serviço',categorias_servico:'+ Nova categoria de serviço',
-    colaboradores:'+ Novo colaborador',parceiros:'+ Novo parceiro',locais:'+ Novo local',fornecedores:'+ Novo fornecedor'};
-  v.innerHTML='<div class="tabs">'+abas.map(a=>'<button class="tab'+(cadTab===a[0]?' on':'')+'" data-tab="'+a[0]+'">'+a[1]+'</button>').join('')+'</div>'+
+    colaboradores:'+ Novo colaborador',locais:'+ Novo local',fornecedores:'+ Novo fornecedor'};
+  v.innerHTML='<div class="tabs">'+GRUPOS.map(g=>'<button class="tab'+(g===grupoAtual?' on':'')+'" data-grp="'+g[1][0][0]+'">'+g[0]+'</button>').join('')+'</div>'+
+    (grupoAtual[1].length>1?'<div class="subtabs">'+grupoAtual[1].map(a=>'<button class="subtab'+(cadTab===a[0]?' on':'')+'" data-tab="'+a[0]+'">'+a[1]+'</button>').join('')+'</div>':'')+
     '<div class="toolbar"><button class="btn" id="nv">'+rotNovo[cadTab]+'</button>'+
     (cadTab==='produtos'?'<select id="fTp"><option value="">Simples e kits</option><option>Simples</option><option>Kit</option></select>'+
       '<select id="fFm"><option value="">Todas as famílias</option>'+S.familias.map(f=>'<option value="'+f.id+'">'+esc(f.nome)+'</option>').join('')+'</select>'+
       '<input type="text" id="fBu" placeholder="Buscar SKU ou descrição…">':'')+
     ((['familias','categorias','centros_lucro','centros_custo','categorias_servico','plano_contas','plano_gerencial'].includes(cadTab))?'<button class="btn sec sm" id="padrao">'+((cadTab==='plano_contas'||cadTab==='plano_gerencial')?'Carregar plano padrão':'Carregar lista padrão')+'</button>':'')+((cadTab==='plano_contas'||cadTab==='plano_gerencial')?'<button class="btn sec sm" id="impc">Importar de arquivo (CSV)</button><button class="btn sec sm" id="modc">Baixar modelo</button><input type="file" id="fpc" accept=".csv,.txt" style="display:none">'+(cadTab==='plano_gerencial'?'<button class="btn sec sm" id="clas">Classificar lançamentos existentes</button>':'')+'':'')+
-    ((['empresas','centros_lucro','centros_custo','produtos','familias','categorias','servicos','categorias_servico','colaboradores','parceiros','plano_contas','plano_gerencial'].includes(cadTab))?'<label style="font-size:12.5px;color:var(--dim);display:flex;gap:6px;align-items:center">'+
+    ((['empresas','centros_lucro','centros_custo','produtos','familias','categorias','servicos','categorias_servico','colaboradores','plano_contas','plano_gerencial'].includes(cadTab))?'<label style="font-size:12.5px;color:var(--dim);display:flex;gap:6px;align-items:center">'+
       '<input type="checkbox" id="fCa"'+(verCancelados?' checked':'')+'> mostrar cancelados</label>':'')+'</div>'+
     '<div class="card"><div class="cbody" id="lst"></div></div>'+
     '<div class="card"><div class="chead"><h2>Dados</h2></div><div class="cbody">'+
@@ -2849,7 +2877,7 @@ R.cadastros=v=>{
     '<button class="btn dgr sm" id="zap">Apagar tudo</button><input type="file" id="fimp" accept=".json" style="display:none"></div>'+
     '<div class="note">Os dados ficam salvos automaticamente. Use Exportar e Importar backup para levar os dados daqui para o Firebase. '+
     '"Apagar tudo" remove todos os registros deste sistema.</div></div></div>';
-  v.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{cadTab=b.dataset.tab;render()});
+  v.querySelectorAll('[data-tab],[data-grp]').forEach(b=>b.onclick=()=>{cadTab=b.dataset.tab||b.dataset.grp;render()});
   document.getElementById('nv').onclick=()=>editRec(cadTab,null);
   const pd=document.getElementById('padrao');
   const ip=document.getElementById('impc');if(ip){ip.onclick=()=>document.getElementById('fpc').click();document.getElementById('fpc').onchange=e=>{importarPlanoArquivo(e.target.files,cadTab);e.target.value=''};
@@ -2941,13 +2969,7 @@ R.cadastros=v=>{
       {l:'Vendas',n:1,f:r=>{const c=comissaoDe(r,vendasDoVendedor(r.id));return c.n?c.n+' · '+money(c.base):'—'}},
       {l:'Comissão estimada',n:1,f:r=>{const c=comissaoDe(r,vendasDoVendedor(r.id));return c.comissao?money(c.comissao):'—'}},
       {l:'Status',f:r=>'<span class="bg '+(ativo(r)?'g-green':'g-red')+'">'+(ativo(r)?'Ativo':'Cancelado')+'</span>'}],
-    parceiros:[{l:'Nome',k:'nome',s:1},{l:'Tipo',f:r=>'<span class="bg g-purple">'+esc(r.tipo||'—')+'</span>'},
-      {l:'Escritório / empresa',k:'empresa_nome'},{l:'Contato',f:r=>esc([r.contato,r.telefone].filter(Boolean).join(' · ')||'—')},
-      {l:'Comissão',f:r=>esc(rotComissao(r))},
-      {l:'Indicações',n:1,f:r=>S.oportunidades.filter(o=>o.parceiro===r.id).length},
-      {l:'Vendas',n:1,f:r=>{const c=comissaoDe(r,vendasDoParceiro(r.id));return c.n?c.n+' · '+money(c.base):'—'}},
-      {l:'Comissão estimada',n:1,f:r=>{const c=comissaoDe(r,vendasDoParceiro(r.id));return c.comissao?money(c.comissao):'—'}},
-      {l:'Status',f:r=>'<span class="bg '+(ativo(r)?'g-green':'g-red')+'">'+(ativo(r)?'Ativo':'Cancelado')+'</span>'}],
+    parceiros:COLS_PARCEIROS,
     locais:[{l:'Local',k:'nome',s:1},{l:'Tipo',f:r=>'<span class="bg g-accent">'+esc(r.tipo)+'</span>'},
       {l:'Responsável',f:r=>esc(nm('colaboradores',r.responsavel))},
       {l:'Itens em posse',n:1,f:r=>S.produtos.filter(p=>Math.abs(saldoProdLocal(p.id,r.id))>0.001).length}],
@@ -2956,7 +2978,7 @@ R.cadastros=v=>{
   };
   const desenhar=()=>{
     let rows=S[cadTab].slice();
-    if(['empresas','centros_lucro','centros_custo','produtos','familias','categorias','servicos','categorias_servico','colaboradores','parceiros','plano_contas','plano_gerencial'].includes(cadTab)){
+    if(['empresas','centros_lucro','centros_custo','produtos','familias','categorias','servicos','categorias_servico','colaboradores','plano_contas','plano_gerencial'].includes(cadTab)){
       if(!verCancelados)rows=rows.filter(ativo);
       if(cadTab==='plano_contas'||cadTab==='plano_gerencial')rows.sort(cmpCodigo);else rows.sort((a,b)=>(ativo(b)-ativo(a))||String(a.nome).localeCompare(String(b.nome)));
     }

@@ -179,3 +179,8 @@ svg.ch{width:100%;height:auto;display:block}
 .logo-ini{display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:700;border:none}
 .logo-prev .blogo{width:44px;height:44px}
 .logo-vazio{font-size:11px;color:var(--faint)}
+
+.subtabs{display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 14px}
+.subtab{padding:5px 12px;font-size:12.5px;color:var(--dim);border:1px solid var(--border);background:var(--panel);border-radius:99px;cursor:pointer}
+.subtab:hover{color:var(--text)}
+.subtab.on{background:var(--brand-soft);color:var(--brand-ink);border-color:transparent;font-weight:600}
