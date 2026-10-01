@@ -410,8 +410,23 @@ const SCH={
  familias:{t:'Família',fem:1,cancelavel:1,f:[{k:'nome',l:'Nome',req:1},{k:'descricao',l:'Descrição'}]},
  categorias:{t:'Categoria',fem:1,cancelavel:1,f:[{k:'nome',l:'Nome',req:1},{k:'descricao',l:'Descrição'}]},
  concorrentes:{t:'Concorrente',f:[
-   {k:'nome',l:'Empresa',req:1},{k:'atuacao',l:'Atuação'},
-   {k:'faixa',l:'Faixa de preço',t:'select',opts:['Baixa','Média','Alta']},
+   {t:'secao',l:'Identificação'},
+   {k:'nome',l:'Empresa',req:1},{k:'cnpj',l:'CNPJ'},
+   {k:'atuacao',l:'Atuação'},{k:'verticais',l:'Verticais em que atua',t:'select',opts:['Residencial','Predial','Corporativo','Residencial e corporativo','Todas']},
+   {k:'regiao',l:'Cidade / região de atuação'},{k:'porte',l:'Porte',t:'select',opts:['Pequeno','Médio','Grande']},
+   {k:'marcas',l:'Marcas e tecnologias que trabalha',full:1},
+   {t:'secao',l:'Presença digital',nota:'Cole o endereço completo ou só o perfil (ex.: @empresa). Os links abrem em nova aba.'},
+   {k:'site',l:'Site'},{k:'instagram',l:'Instagram'},{k:'tiktok',l:'TikTok'},{k:'linkedin',l:'LinkedIn'},
+   {k:'youtube',l:'YouTube'},{k:'facebook',l:'Facebook'},{k:'google_perfil',l:'Google Meu Negócio / Maps'},{k:'whatsapp',l:'WhatsApp'},
+   {k:'email',l:'E-mail'},{k:'telefone',l:'Telefone'},
+   {t:'secao',l:'Audiência e reputação',nota:'Números observados na data da última verificação.'},
+   {k:'seg_instagram',l:'Seguidores no Instagram',t:'number',step:'1'},{k:'seg_tiktok',l:'Seguidores no TikTok',t:'number',step:'1'},
+   {k:'seg_linkedin',l:'Seguidores no LinkedIn',t:'number',step:'1'},{k:'seg_youtube',l:'Inscritos no YouTube',t:'number',step:'1'},
+   {k:'nota_google',l:'Nota no Google (0 a 5)',t:'number',step:'0.1'},{k:'aval_google',l:'Avaliações no Google',t:'number',step:'1'},
+   {k:'posts_semana',l:'Publicações por semana',t:'number',step:'1'},{k:'anuncios',l:'Anuncia (Meta, Google)?',t:'select',opts:['Sim','Não','Não sei']},
+   {k:'verificado_em',l:'Verificado em',t:'date'},{t:'vazio'},
+   {t:'secao',l:'Análise'},
+   {k:'faixa',l:'Faixa de preço',t:'select',opts:['Baixa','Média','Alta']},{t:'vazio'},
    {k:'fortes',l:'Pontos fortes',t:'textarea'},{k:'fracos',l:'Pontos fracos',t:'textarea'},
    {k:'ultima',l:'Última observação',t:'textarea'}]}
 };
@@ -2348,13 +2363,32 @@ R.canais=v=>{
     wireTable(el,'canais');
   });
 };
+const REDES_HOST=/(^|\.)(instagram|tiktok|linkedin|youtube|facebook|google|goo)\./i;
+function urlRede(rede,v){
+  v=String(v||'').trim();if(!v||/\s/.test(v))return '';
+  if(/^https?:\/\//i.test(v))return v;
+  if(rede==='site'||/\//.test(v)||REDES_HOST.test(v))return 'https://'+v;
+  const h=v.replace(/^@/,'');
+  return ({instagram:'https://www.instagram.com/',tiktok:'https://www.tiktok.com/@',linkedin:'https://www.linkedin.com/company/',
+    youtube:'https://www.youtube.com/@',facebook:'https://www.facebook.com/'}[rede]||'')+(['instagram','tiktok','linkedin','youtube','facebook'].includes(rede)?encodeURIComponent(h):'');
+}
+const REDES=[['site','Site'],['instagram','Instagram'],['tiktok','TikTok'],['linkedin','LinkedIn'],['youtube','YouTube'],['facebook','Facebook'],['google_perfil','Google']];
+function linksRedes(r){
+  const l=REDES.map(x=>{const u=urlRede(x[0]==='google_perfil'?'site':x[0],r[x[0]]);
+    return u?'<a href="'+esc(u)+'" target="_blank" rel="noopener noreferrer" style="color:var(--accent);margin-right:8px;white-space:nowrap">'+x[1]+'</a>':''}).join('');
+  return l||'<span style="color:var(--faint)">—</span>';
+}
 R.concorrentes=v=>{
   v.innerHTML='<div class="toolbar"><button class="btn" id="nk">+ Novo concorrente</button></div>'+
     '<div class="card"><div class="cbody" id="lx"></div></div>';
   document.getElementById('nk').onclick=()=>editRec('concorrentes',null);
   const lx=document.getElementById('lx');
+  const seg=r=>[['IG',r.seg_instagram],['TikTok',r.seg_tiktok],['LinkedIn',r.seg_linkedin]].filter(x=>Number(x[1])>0)
+    .map(x=>x[0]+' '+num(x[1],0)).join(' · ')||'—';
   lx.innerHTML=tbl([{l:'Empresa',k:'nome',s:1},{l:'Atuação',k:'atuacao'},{l:'Faixa',k:'faixa'},
-    {l:'Pontos fortes',k:'fortes'},{l:'Última observação',k:'ultima'}],
+    {l:'Presença digital',f:linksRedes},{l:'Seguidores',f:r=>esc(seg(r))},
+    {l:'Google',f:r=>Number(r.nota_google)>0?esc(num(r.nota_google,1))+' ★'+(Number(r.aval_google)?' ('+num(r.aval_google,0)+')':''):'—'},
+    {l:'Verificado em',f:r=>dBR(r.verificado_em)},{l:'Última observação',k:'ultima'}],
     S.concorrentes,{acts:1,empty:'Nenhum concorrente monitorado.'});
   wireTable(lx,'concorrentes');
 };
