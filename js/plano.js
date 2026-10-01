@@ -172,11 +172,17 @@ function apurarGerencial(ano,pertence){
     if(!c){semConta.n++;semConta.v+=v;return}
     proprio[c.id]=(proprio[c.id]||0)+sinalConta(c.tipo,l.tipo)*v;
   });
-  const mo=S.apontamentos.filter(a=>String(a.data||'').startsWith(ano)&&pertence('apontamentos',a)).reduce((acc,a)=>{
-    const c=byId('colaboradores',a.colaborador);return acc+Number(a.horas||0)*Number((c&&c.custo_hora)||0)},0);
-  const cm=S.plano_gerencial.find(x=>x.codigo==='3.2.01'&&contaAnalitica(x));
-  if(mo&&cm)proprio[cm.id]=(proprio[cm.id]||0)+mo;
-  return{proprio:proprio,semConta:semConta,mo:mo};
+  // custo das horas apontadas: equipe própria vai para 3.2.01; terceirizados para 3.2.03
+  const moProp={p:0,t:0};
+  S.apontamentos.filter(a=>String(a.data||'').startsWith(ano)&&pertence('apontamentos',a)).forEach(a=>{
+    const c=byId('colaboradores',a.colaborador),v=Number(a.horas||0)*Number((c&&c.custo_hora)||0);
+    if(c&&c.vinculo==='Terceirizado')moProp.t+=v;else moProp.p+=v;
+  });
+  [['3.2.01',moProp.p],['3.2.03',moProp.t]].forEach(x=>{
+    const cm=S.plano_gerencial.find(g=>g.codigo===x[0]&&contaAnalitica(g));
+    if(x[1]&&cm)proprio[cm.id]=(proprio[cm.id]||0)+x[1];
+  });
+  return{proprio:proprio,semConta:semConta,mo:moProp.p+moProp.t};
 }
 function apurarContabil(proprioG){
   const proprio={},semVinculo=[];

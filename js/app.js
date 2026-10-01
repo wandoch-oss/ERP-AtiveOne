@@ -357,6 +357,7 @@ const SCH={
    {t:'secao',l:'Identificação'},
    {k:'nome',l:'Nome',req:1},{k:'tipo',l:'Tipo',t:'select',opts:TIPOS_COLAB,req:1},
    {k:'funcao',l:'Função / cargo'},{k:'telefone',l:'Telefone / WhatsApp'},{k:'email',l:'E-mail',full:1},
+   {k:'vinculo',l:'Vínculo',t:'select',opts:['Próprio','Terceirizado']},{k:'fornecedor',l:'Fornecedor / empresa (se terceirizado)',t:'ref',col:'fornecedores'},
    {t:'secao',l:'Custo e capacidade'},
    {k:'custo_hora',l:'Custo/hora (R$)',t:'money'},{k:'capacidade',l:'Horas/semana',t:'number',step:'1'},
    {t:'secao',l:'Comissão',nota:'Calculada sobre as vendas em que a pessoa consta como vendedora.'},
@@ -497,6 +498,7 @@ function editRec(col,id,after,preset){
   if(col==='contratos'){const base=id?byId(col,id):(preset||{});
     if(base&&base.tipo==='Fornecedor')sc=SCH.contratos_forn;else if(base&&base.subtipo==='Venda')sc=SCH.contratos_venda;
     preset=Object.assign({tipo:(base&&base.tipo)||'Cliente'},(base&&base.tipo==='Fornecedor')||(base&&base.subtipo)?{}:{subtipo:'Manutenção'},preset||{})}
+  if(col==='colaboradores'&&!id)preset=Object.assign({vinculo:'Próprio'},preset||{});
   if(col==='servicos'&&!id)preset=Object.assign({codigo:proxCodigoServ(),unidade:'hora',gera_os:'Sim',comissao_tipo:'Sem comissão',prazo_un:'horas'},preset||{});
   if(col==='os'&&!id)preset=Object.assign({cobranca:'Sob demanda',status:'Agendada',data:hoje()},preset||{});
   if(!id&&sc.f.some(f=>f.k==='empresa')){preset=Object.assign({empresa:UNID||empresaPadrao()},preset||{})}
@@ -2962,7 +2964,8 @@ R.cadastros=v=>{
       {l:'Contas gerenciais',n:1,f:r=>r.natureza==='Analítica'?S.plano_gerencial.filter(g=>g.conta_contabil===r.id).length:'—'},
       {l:'Status',f:r=>'<span class="bg '+(ativo(r)?'g-green':'g-red')+'">'+(ativo(r)?'Ativa':'Cancelada')+'</span>'}],
     colaboradores:[{l:'Nome',k:'nome',s:1},{l:'Tipo',f:r=>r.tipo?'<span class="bg '+(r.tipo==='Técnico'?'g-brand':r.tipo==='Vendedor'?'g-accent':'g-gray')+'">'+esc(r.tipo)+'</span>':'<span style="color:var(--faint)">definir</span>'},
-      {l:'Função',k:'funcao'},{l:'Contato',f:r=>esc([r.telefone,r.email].filter(Boolean).join(' · ')||'—')},
+      {l:'Função',k:'funcao'},{l:'Vínculo',f:r=>r.vinculo==='Terceirizado'?'<span class="bg g-amber">Terceirizado</span>'+(r.fornecedor?'<div style="font-size:11px;color:var(--faint)">'+esc(nm('fornecedores',r.fornecedor))+'</div>':''):'<span class="bg g-gray">Próprio</span>'},
+      {l:'Contato',f:r=>esc([r.telefone,r.email].filter(Boolean).join(' · ')||'—')},
       {l:'Custo/hora',n:1,f:r=>money(r.custo_hora)},{l:'Horas/semana',n:1,k:'capacidade'},
       {l:'Horas lançadas',n:1,f:r=>num(S.apontamentos.filter(a=>a.colaborador===r.id).reduce((a,x)=>a+Number(x.horas||0),0),1)},
       {l:'Comissão',f:r=>esc(rotComissao(r))},
