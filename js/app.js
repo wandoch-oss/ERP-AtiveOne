@@ -258,6 +258,20 @@ function validarServico(d){
   if(Number(d.margem_min)<0||Number(d.margem_min)>=100)return 'A margem mínima fica entre 0% e 100%.';
   return '';
 }
+const HORAS_POR={horas:1,dias:8,semanas:40,meses:160};
+function ligarServicoOS(m){
+  const sel=m.querySelector('#f_servico');if(!sel)return;
+  const set=(k,v,so_vazio)=>{const el=m.querySelector('#f_'+k);if(!el)return;
+    if(so_vazio&&el.value&&Number(el.value)!==0)return;el.value=v};
+  sel.onchange=()=>{
+    const sv=byId('servicos',sel.value);if(!sv)return;
+    if(sv.tipo_os)set('tipo',sv.tipo_os);
+    set('descricao',sv.nome,true);
+    if(Number(sv.prazo))set('duracao',Math.round(Number(sv.prazo)*(HORAS_POR[sv.prazo_un]||1)*2)/2,true);
+    const cob=m.querySelector('#f_cobranca');
+    if(cob&&cob.value==='Sob demanda'&&Number(sv.venda))set('valor',Number(sv.venda),true);
+  };
+}
 const SCH={
  clientes:{t:'Cliente',f:[
    {t:'secao',l:'Dados básicos'},
@@ -342,8 +356,8 @@ const SCH={
    {k:'reajuste',l:'Índice de reajuste',t:'select',opts:INDICES},{k:'mes_reajuste',l:'Mês do reajuste',t:'select',opts:MESES_OPT},
    {k:'status',l:'Status',t:'select',opts:['Ativo','Suspenso','Encerrado'],req:1},{t:'vazio'},
    {k:'obs',l:'Observações',t:'textarea'}]},
- os:{t:'Ordem de serviço',fem:1,f:[
-   {k:'cliente',l:'Cliente',t:'ref',col:'clientes',req:1},{k:'obra',l:'Projeto vinculado',t:'ref',col:'obras',lab:'codigo'},
+ os:{t:'Ordem de serviço',fem:1,ligar:ligarServicoOS,f:[
+   {k:'cliente',l:'Cliente',t:'ref',col:'clientes',req:1},{k:'servico',l:'Serviço (preenche tipo, prazo e valor)',t:'ref',col:'servicos',filtro:r=>ativo(r),rotulo:r=>(r.codigo?r.codigo+' · ':'')+r.nome},{k:'obra',l:'Projeto vinculado',t:'ref',col:'obras',lab:'codigo'},
    {k:'tipo',l:'Tipo',t:'select',opts:['Instalação','Manutenção preventiva','Corretiva','Garantia','Visita técnica','Treinamento'],req:1},
    {k:'cobranca',l:'Cobrança',t:'select',opts:COBR_OS,req:1},{k:'valor',l:'Valor a cobrar (R$) — se sob demanda',t:'money'},
    {k:'descricao',l:'Descrição',req:1,full:1},
@@ -428,6 +442,7 @@ function editRec(col,id,after,preset){
     }
     put(col,Object.assign({},id?rec:(preset||{}),d));toast('Salvo');fim();
   });
+  if(sc.ligar)sc.ligar(modal);
   const b=document.getElementById('mDel');
   if(b)b.onclick=()=>{if(confirm('Excluir definitivamente?')){del(col,id);toast('Excluído');fim()}};
   const c=document.getElementById('mCan');
