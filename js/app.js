@@ -574,12 +574,12 @@ let route='painel';
 function go(k){route=k;if(k==='cadastros')cadTab='empresas';document.getElementById('side').classList.remove('open');render();window.scrollTo(0,0)}
 function drawNav(){
   const el=document.getElementById('side');
-  let h='<div class="logo"><i></i> Ative One</div>';
+  let h='<div class="brand" title="Ative One"><img src="assets/logo-app.png" alt="Ative One"><span class="brand-one">ONE</span></div>';
   NAV.forEach(g=>{
     if(g.g)h+='<div class="ng">'+g.g+'</div>';
     g.i.forEach(it=>{
       const alert=navBadge(it[0]);
-      h+='<button class="nav'+(route===it[0]?' on':'')+'" data-go="'+it[0]+'"><span style="width:16px;text-align:center">'+it[2]+'</span>'+it[1]+(alert?'<b>'+alert+'</b>':'')+'</button>';
+      h+='<button class="nav'+(route===it[0]?' on':'')+'" data-go="'+it[0]+'"><span class="ni">'+ic(NAV_IC[it[0]]||'dashboard',17)+'</span><span class="nt">'+it[1]+'</span>'+(alert?'<b>'+alert+'</b>':'')+'</button>';
     });
   });
   h+='<div class="sfoot">Dados salvos automaticamente.<br>Vertical: residencial · predial · corporativo</div>';
@@ -608,7 +608,8 @@ function drawUnid(){
 function render(){
   drawUnid();
   drawNav();
-  document.getElementById('ttl').textContent=(NAV.flatMap(g=>g.i).find(i=>i[0]===route)||[,'Painel'])[1];
+  const tit=(NAV.flatMap(g=>g.i).find(i=>i[0]===route)||[,'Painel'])[1];
+  document.getElementById('ttl').innerHTML='<span class="ti">'+ic(NAV_IC[route]||'dashboard',19)+'</span>'+esc(tit);
   document.getElementById('sub').textContent=(SUB[route]||'')+(UNID&&['painel','vendas','orcamentos','obras','os','contratos','estoque','compras','financeiro','bancos','conciliacao','fluxo','dre','dre_contabil','marketing'].includes(route)?' · '+nomeUnid(UNID):'');
   const v=document.getElementById('view');
   v.innerHTML='';
@@ -703,7 +704,12 @@ R.painel=v=>{
   const osHoje=U('os').filter(o=>o.data===hoje());
   const ag=S.agenda.filter(a=>a.data===hoje());
   const vm=U('vendas').filter(x=>x.status!=='Cancelada'&&mesDe(x.data)===mes);
-  v.innerHTML='<div class="kpis">'+
+  const hr=new Date().getHours(),saud=hr<12?'Bom dia':hr<18?'Boa tarde':'Boa noite';
+  const rap=[['filetext','Novo orçamento','novoOrc()'],['users','Novo cliente',"editRec('clientes',null)"],['funnel','Nova oportunidade',"editRec('oportunidades',null)"],
+    ['wrench','Nova ordem de serviço',"editRec('os',null)"],['dollar','Novo lançamento',"editRec('financeiro',null)"],['calendar','Agenda',"go('agenda')"]];
+  v.innerHTML='<div class="hero"><div class="hero-t"><div class="hero-h">'+saud+'.</div><div class="hero-s">'+dBR(hoje())+' · '+(ativas.length?ativas.length+' projeto(s) em execução':'nenhum projeto em execução')+
+    (venc.length?' · '+venc.length+' conta(s) vencida(s)':'')+'</div></div><div class="quick">'+rap.map(r=>'<button class="qa" data-qa="'+esc(r[2])+'"><span class="qi">'+ic(r[0],20)+'</span><span>'+r[1]+'</span></button>').join('')+'</div></div>'+
+   '<div class="kpis">'+
    kpi('Vendas no mês',money(vm.reduce((a,x)=>a+Number(x.valor||0),0)),vm.length+' venda(s)')+
    kpi('Projetos em execução',ativas.length,backlog>0?money(backlog)+' em backlog':'')+
    kpi('A receber no mês',money(recMes),'')+
@@ -718,6 +724,7 @@ R.painel=v=>{
      '<div class="card"><div class="chead"><h2>Hoje</h2><span class="hint">'+dBR(hoje())+'</span></div><div class="cbody" id="pHoje"></div></div>'+
      '<div class="card"><div class="chead"><h2>Funil comercial</h2></div><div class="cbody" id="pFunil"></div></div>'+
    '</div>';
+  v.querySelectorAll('[data-qa]').forEach(b=>b.onclick=()=>{new Function(b.dataset.qa)()});
   const po=document.getElementById('pObras');
   po.innerHTML=tbl([{l:'Projeto',s:1,f:r=>esc(r.codigo)+' · '+esc(r.titulo||'')},
     {l:'Cliente',f:r=>esc(nm('clientes',r.cliente))},
@@ -766,7 +773,7 @@ R.painel=v=>{
     return '<tr><td>'+e+'</td><td class="n s">'+l.length+'</td><td class="n">'+money(l.reduce((a,o)=>a+Number(o.valor||0),0))+'</td></tr>'
   }).join('')+'</table>';
 };
-const kpi=(l,v,d)=>'<div class="kpi"><div class="l">'+esc(l)+'</div><div class="v">'+v+'</div>'+(d?'<div class="d">'+esc(d)+'</div>':'')+'</div>';
+const kpi=(l,v,d)=>'<div class="kpi"><div class="kic">'+ic(iconeKpi(l),18)+'</div><div class="kbody"><div class="l">'+esc(l)+'</div><div class="v">'+v+'</div>'+(d?'<div class="d">'+esc(d)+'</div>':'')+'</div></div>';
 
 R.clientes=v=>{
   v.innerHTML='<div class="toolbar"><button class="btn" id="nv">+ Novo cliente</button>'+
