@@ -26,6 +26,8 @@ const ICONES={
  pie:'<path d="M12 3v9h9"/><path d="M20.5 15A9 9 0 1 1 9 3.5"/>',
  settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>',
  plus:'<path d="M12 5v14M5 12h14"/>',
+ userplus:'<circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-7 7-7s7 3 7 7"/><path d="M19 8v6M16 11h6"/>',
+ truck:'<path d="M2 6h11v10H2zM13 9h4l4 3v4h-8"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>',
  edit:'<path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17z"/><path d="M14 8l3 3"/>',
  trash:'<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
  save:'<path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/>',
@@ -76,10 +78,16 @@ const BTN_IC=[
   [/^escolher/i,'list'],[/^classificar/i,'tag'],[/^transferir/i,'swap'],[/^voltar/i,'back'],
   [/^(liquidar|conciliar|registrar|confirmar|concluir|aprovar|emitir|criar|adicionar|baixar material)/i,'check']
 ];
+const NOVO_IC=[[/cliente/i,'userplus'],[/colaborador|pessoa/i,'userplus'],[/oportunidade/i,'funnel'],[/or[cç]amento/i,'filetext'],[/venda/i,'checkc'],
+  [/ordem de servi|^(nova )?os$/i,'wrench'],[/servi[cç]o/i,'wrench'],[/lan[cç]amento/i,'dollar'],[/projeto/i,'building'],[/contrato/i,'contract'],
+  [/parceiro/i,'link'],[/produto|local|kit/i,'box'],[/empresa/i,'building'],[/conta banc/i,'bank'],[/conta/i,'list'],[/fornecedor/i,'truck'],
+  [/concorrente/i,'eye'],[/campanha/i,'megaphone'],[/canal/i,'share'],[/compromisso|agenda/i,'calendar'],[/pedido|compra/i,'cart'],
+  [/fam[ií]lia|categoria/i,'tag'],[/centro/i,'target']];
+function iconeNovo(t){for(const r of NOVO_IC)if(r[0].test(t))return r[1];return 'plus'}
+function ehNovo(txt){return /^\+/.test(txt)||/^(novo|nova)\s/i.test(txt)}
 function iconeBotao(txt){
   const t=txt.replace(/^\+\s*/,'');
-  if(/^\+/.test(txt))return 'plus';
-  if(/^(novo|nova|adicionar|criar|\+)/i.test(t)&&!/^criar (contrato|projeto) avulso/i.test(t))return 'plus';
+  if(/^\+/.test(txt)||/^(novo|nova|adicionar)/i.test(t))return 'plus';
   for(const r of BTN_IC)if(r[0].test(t))return r[1];
   return '';
 }
@@ -90,8 +98,12 @@ function decorarIcones(raiz){
     const txt=b.textContent.trim();
     if(!txt)return;
     if(txt==='×'){b.innerHTML=ic('x',14);b.setAttribute('aria-label','Remover');return}
+    const rot=txt.replace(/^\+\s*/,'').replace(/</g,'&lt;');
+    if(ehNovo(txt)&&!b.classList.contains('sec')&&!b.classList.contains('sm')){
+      b.innerHTML='<span class="bi">'+ic(iconeNovo(rot),17)+'</span><span>'+rot+'</span>';b.classList.add('ibtn','ibig');return;
+    }
     const nome=iconeBotao(txt);if(!nome)return;
-    b.innerHTML=ic(nome,b.classList.contains('sm')?13:15)+'<span>'+txt.replace(/^\+\s*/,'').replace(/</g,'&lt;')+'</span>';
+    b.innerHTML=ic(nome,b.classList.contains('sm')?13:15)+'<span>'+rot+'</span>';
     b.classList.add('ibtn');
   });
   (raiz||document).querySelectorAll('.tabs .tab:not([data-ic])').forEach(b=>{

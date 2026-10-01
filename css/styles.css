@@ -256,3 +256,9 @@ tbody tr:hover td{background:var(--panel-2)}
 #modal{border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
 .mhead{background:var(--panel-2);border-radius:16px 16px 0 0}
 @media(max-width:780px){#side{width:260px}.hero{padding:16px}.quick .qa span:last-child{font-size:12px}}
+
+.btn.ibig{padding:5px 16px 5px 6px;gap:10px;font-weight:600;border-radius:12px}
+.btn.ibig .bi{position:relative;display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:rgba(255,255,255,.2)}
+.btn.ibig .bi:after{content:"+";position:absolute;top:-5px;right:-5px;width:14px;height:14px;border-radius:50%;background:#fff;color:#1d4a3e;font-size:11px;font-weight:700;line-height:14px;text-align:center;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn.ibig .bi{background:rgba(0,0,0,.18)}:root:not([data-theme="light"]) .btn.ibig .bi:after{background:#0d1a16;color:#9fe0cd}}
+:root[data-theme="dark"] .btn.ibig .bi{background:rgba(0,0,0,.18)}:root[data-theme="dark"] .btn.ibig .bi:after{background:#0d1a16;color:#9fe0cd}
