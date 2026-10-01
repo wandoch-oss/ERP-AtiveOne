@@ -181,7 +181,8 @@ function field(f,val){
   }else if(f.t==='money'||f.t==='number'){
     inp='<input type="number" step="'+(f.step||'0.01')+'" id="'+id+'" data-k="'+f.k+'" value="'+esc(v)+'">';
   }else{
-    inp='<input type="'+(f.t==='date'?'date':'text')+'" id="'+id+'" data-k="'+f.k+'" value="'+esc(v)+'">';
+    inp='<input type="'+(f.t==='date'?'date':'text')+'" id="'+id+'" data-k="'+f.k+'" value="'+esc(v)+'"'+(f.lista?' list="dl_'+f.k+'"':'')+'>'+
+      (f.lista?'<datalist id="dl_'+f.k+'">'+BANCOS.map(b=>'<option value="'+esc(b[1])+'">').join('')+'</datalist>':'');
   }
   return '<label class="f"><span>'+esc(f.l)+(f.req?' *':'')+'</span>'+inp+'</label>';
 }
@@ -427,7 +428,7 @@ const SCH={
    {k:'status',l:'Status',t:'select',opts:['Pendente','Pago','Recebido','Atrasado'],req:1},
    {k:'pagamento',l:'Data de liquidação',t:'date'},campoConta]},
  contas_bancarias:{t:'Conta bancária',fem:1,cancelavel:1,f:[
-   {k:'nome',l:'Apelido da conta',req:1},{k:'banco',l:'Banco'},
+   {k:'nome',l:'Apelido da conta',req:1},{k:'banco',l:'Banco (escolha da lista ou digite)',lista:'BANCOS'},
    {k:'logo',l:'Logo do banco',t:'imagem',full:1},
    {k:'agencia',l:'Agência'},{k:'numero',l:'Número da conta'},
    {k:'tipo',l:'Tipo',t:'select',opts:['Conta corrente','Poupança','Aplicação','Caixa']},campoUnid,
@@ -1984,9 +1985,19 @@ R.financeiro=v=>{
 };
 
 /* ---------- contas bancárias e conciliação ---------- */
+const BANCOS=[[/ita[uú]/i,'Itaú','itaú','#ec7000','#fff'],[/bradesco/i,'Bradesco','B','#cc092f','#fff'],[/banco do brasil|^bb$|\bbb\b/i,'Banco do Brasil','BB','#fae128','#003da5'],
+ [/caixa|\bcef\b/i,'Caixa Econômica Federal','CAIXA','#005ca9','#fff'],[/santander/i,'Santander','S','#ec0000','#fff'],[/nubank|nu pagamentos/i,'Nubank','nu','#820ad1','#fff'],
+ [/inter\b/i,'Inter','inter','#ff7a00','#fff'],[/\bc6\b/i,'C6 Bank','C6','#1a1a1a','#fff'],[/sicredi/i,'Sicredi','Sicredi','#3fa535','#fff'],
+ [/sicoob/i,'Sicoob','Sicoob','#003641','#7db61c'],[/btg/i,'BTG Pactual','BTG','#001e62','#fff'],[/safra/i,'Safra','Safra','#0e2b5c','#fff'],
+ [/banrisul/i,'Banrisul','Banri','#0066b3','#fff'],[/mercado ?pago/i,'Mercado Pago','MP','#00b1ea','#fff'],[/pagbank|pagseguro/i,'PagBank','Pag','#1ec85a','#0a0a0a'],
+ [/stone/i,'Stone','stone','#00a868','#fff'],[/cora/i,'Cora','cora','#fe3e6d','#fff'],[/original/i,'Banco Original','orig','#00a651','#fff'],
+ [/asaas/i,'Asaas','asaas','#0030b9','#fff'],[/bnb|nordeste/i,'Banco do Nordeste','BNB','#d2232a','#fff'],[/brb/i,'BRB','BRB','#00a0e3','#fff']];
+const bancoDe=c=>BANCOS.find(b=>b[0].test(String(c&&c.banco||'')))||BANCOS.find(b=>b[0].test(String(c&&c.nome||'')))||null;
 function logoConta(c,px){
   px=px||28;if(!c)return '';
   if(c.logo)return '<img class="blogo" style="width:'+px+'px;height:'+px+'px" src="'+esc(c.logo)+'" alt="">';
+  const b=bancoDe(c);
+  if(b)return '<span class="blogo logo-ini" title="'+esc(b[1])+'" style="width:'+px+'px;height:'+px+'px;background:'+b[3]+';color:'+b[4]+';font-size:'+Math.round(px*(b[2].length<=2?.42:b[2].length<=4?.34:.24))+'px;letter-spacing:-.02em">'+esc(b[2])+'</span>';
   const t=String(c.banco||c.nome||'?').trim(),ini=t.split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperCase();
   let h=0;for(const ch of t)h=(h*31+ch.charCodeAt(0))%360;
   return '<span class="blogo logo-ini" style="width:'+px+'px;height:'+px+'px;background:hsl('+h+' 45% 38%);font-size:'+Math.round(px*.4)+'px">'+esc(ini)+'</span>';
