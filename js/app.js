@@ -115,6 +115,9 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');
   clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),2200)}
 
+const NATUREZAS=['Empresário Individual (inclui MEI)','Sociedade Limitada Unipessoal (SLU)','Sociedade Empresária Limitada',
+ 'Empresa Individual de Responsabilidade Limitada (EIRELI)','Sociedade Anônima Fechada','Sociedade Anônima Aberta','Sociedade Simples Limitada',
+ 'Sociedade Simples Pura','Sociedade em Nome Coletivo','Sociedade em Comandita Simples','Cooperativa','Associação Privada','Fundação Privada'];
 const VERTICAIS=['Residencial','Predial','Corporativo'];
 const INDICES=['Nenhum','IPCA','IGP-M','INPC','Fixo'];
 const MESES_OPT=[{v:'',l:'—'}].concat(['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'].map((m,i)=>({v:String(i+1),l:m})));
@@ -2507,7 +2510,7 @@ function editarEmpresa(id,after,aba){
       {k:'regime',l:'Regime tributário',t:'select',opts:['Simples Nacional','MEI','Lucro Presumido','Lucro Real']},
       {k:'porte',l:'Porte',t:'select',opts:['MEI','ME','EPP','Demais']},
       {k:'cnae',l:'CNAE principal'},{k:'cnaes_sec',l:'CNAEs secundários'},
-      {k:'natureza',l:'Natureza jurídica',full:1}],
+      {k:'natureza',l:'Natureza jurídica',t:'select',full:1,opts:NATUREZAS.concat(e.natureza&&!NATUREZAS.includes(e.natureza)?[e.natureza]:[])}],
     end:[{t:'secao',l:'Endereço'},
       {k:'cep',l:'CEP'},{k:'uf',l:'UF',t:'select',opts:UFS},
       {k:'logradouro',l:'Logradouro',full:1},{k:'numero',l:'Número'},{k:'complemento',l:'Complemento'},
