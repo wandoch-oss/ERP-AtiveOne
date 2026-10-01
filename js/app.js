@@ -1,7 +1,7 @@
 /* ---------- estado e persistência ---------- */
 const COLS=['clientes','oportunidades','orcamentos','obras','os','agenda','contratos','apontamentos',
 'produtos','servicos','categorias_servico','locais','estoque','compras','fornecedores','financeiro','nfe','campanhas',
-'concorrentes','contas_bancarias','extrato','colaboradores','parceiros','plano_contas','ajustes','reservas','aditivos','familias','categorias','vendas','canais','empresas','centros_lucro','centros_custo'];
+'concorrentes','contas_bancarias','extrato','colaboradores','parceiros','plano_contas','plano_gerencial','ajustes','reservas','aditivos','familias','categorias','vendas','canais','empresas','centros_lucro','centros_custo'];
 const S={}; COLS.forEach(c=>S[c]=[]);
 let DB=null, DL=null, FB=null, ASSETS=null, MODE='local', pend={};
 
@@ -335,15 +335,23 @@ const SCH={
    {k:'cod_trib_mun',l:'Código de tributação municipal'},{k:'iss_aliq',l:'Alíquota de ISS (%)',t:'number',step:'0.01'},
    {k:'iss_trat',l:'Tratamento do ISS',t:'select',opts:['Tributado no município','Retido pelo tomador','Isento','Imune','Suspenso'],full:1},
    {t:'secao',l:'Integrações e contabilidade'},
-   {k:'conta_contabil',l:'Conta contábil de receita',t:'ref',col:'plano_contas',lab:'codigo',filtro:c=>c.natureza==='Analítica'&&c.tipo==='Receita'&&ativo(c),rotulo:c=>(c.codigo?c.codigo+' · ':'')+c.nome,full:1},campoCL,campoCC,
+   {k:'conta_gerencial',l:'Conta de receita (plano gerencial)',t:'ref',col:'plano_gerencial',lab:'codigo',filtro:c=>c.natureza==='Analítica'&&c.tipo==='Receita'&&ativo(c),rotulo:c=>(c.codigo?c.codigo+' · ':'')+c.nome,full:1},campoCL,campoCC,
    {k:'gera_os',l:'Gera ordem de serviço',t:'select',opts:['Sim','Não']},{k:'tipo_os',l:'Tipo de OS padrão',t:'select',opts:['Instalação','Manutenção preventiva','Corretiva','Garantia','Visita técnica','Treinamento']},
    {k:'equipe',l:'Técnicos necessários',t:'number',step:'1'},{k:'funcao_exigida',l:'Função / perfil exigido'}]},
- plano_contas:{t:'Conta',fem:1,cancelavel:1,unico:['codigo'],validar:d=>validarConta(d),f:[
+ plano_contas:{t:'Conta contábil',fem:1,cancelavel:1,unico:['codigo'],validar:d=>validarConta('plano_contas',d),f:[
    {k:'codigo',l:'Código (ex.: 3.1.01)',req:1},{k:'nome',l:'Nome da conta',req:1},
-   {k:'tipo',l:'Tipo',t:'select',opts:['Receita','Custo','Despesa','Ativo','Passivo'],req:1},{k:'natureza',l:'Natureza',t:'select',opts:['Sintética','Analítica'],req:1},
+   {k:'tipo',l:'Tipo',t:'select',opts:['Ativo','Passivo','Patrimônio líquido','Receita','Dedução','Custo','Despesa','Receita financeira','Despesa financeira','Imposto sobre o lucro'],req:1},
+   {k:'natureza',l:'Natureza',t:'select',opts:['Sintética','Analítica'],req:1},
    {k:'pai',l:'Conta pai (grupo)',t:'ref',col:'plano_contas',lab:'codigo',filtro:r=>ativo(r)&&r.natureza==='Sintética',rotulo:r=>(r.codigo?r.codigo+' · ':'')+r.nome},
-   {k:'categoria_dre',l:'Linha do DRE (só analítica)',t:'select',opts:['Serviço','Material','Contrato','Mão de obra','Terceiros','Marketing','Administrativo','Impostos','Outros']},
-   {k:'descricao',l:'Descrição',full:1}]},
+   {t:'vazio'},{k:'descricao',l:'Descrição',full:1}]},
+ plano_gerencial:{t:'Conta gerencial',fem:1,cancelavel:1,unico:['codigo'],validar:d=>validarConta('plano_gerencial',d),f:[
+   {k:'codigo',l:'Código (ex.: 3.2.01)',req:1},{k:'nome',l:'Nome da conta',req:1},
+   {k:'tipo',l:'Tipo (define a posição no DRE)',t:'select',opts:['Receita','Dedução','Custo','Despesa','Receita financeira','Despesa financeira','Imposto sobre o lucro'],req:1},
+   {k:'natureza',l:'Natureza',t:'select',opts:['Sintética','Analítica'],req:1},
+   {k:'pai',l:'Conta pai (grupo)',t:'ref',col:'plano_gerencial',lab:'codigo',filtro:r=>ativo(r)&&r.natureza==='Sintética',rotulo:r=>(r.codigo?r.codigo+' · ':'')+r.nome},
+   {k:'conta_contabil',l:'Conta contábil vinculada (só analítica)',t:'ref',col:'plano_contas',lab:'codigo',filtro:c=>c.natureza==='Analítica'&&ativo(c),rotulo:c=>(c.codigo?c.codigo+' · ':'')+c.nome},
+   {k:'categoria_dre',l:'Categoria do lançamento (apoio)',t:'select',opts:['Serviço','Material','Contrato','Mão de obra','Terceiros','Marketing','Administrativo','Impostos','Outros']},
+   {t:'vazio'},{k:'descricao',l:'Descrição',full:1}]},
  categorias_servico:{t:'Categoria de serviço',fem:1,cancelavel:1,f:[{k:'nome',l:'Nome',req:1},{k:'descricao',l:'Descrição'}]},
  colaboradores:{t:'Colaborador',cancelavel:1,f:[
    {t:'secao',l:'Identificação'},
@@ -423,7 +431,7 @@ const SCH={
    {k:'tipo',l:'Tipo',t:'select',opts:['Visita técnica','Reunião','Entrega','Comissionamento','Interno'],req:1},
    {k:'cliente',l:'Cliente',t:'ref',col:'clientes'},{k:'responsavel',l:'Responsável',t:'ref',col:'colaboradores'},
    {k:'data',l:'Data',t:'date',req:1},{k:'hora',l:'Hora'},{k:'local',l:'Local'},{k:'obs',l:'Notas',t:'textarea'}]},
- financeiro:{t:'Lançamento',ligar:m=>ligarContaPlano(m),f:[
+ financeiro:{t:'Lançamento',ligar:m=>ligarContaGerencial(m),f:[
    {k:'tipo',l:'Tipo',t:'select',opts:['Receber','Pagar'],req:1},campoUnid,
    {k:'descricao',l:'Descrição',req:1},
    {k:'categoria',l:'Categoria',t:'select',opts:['Serviço','Material','Contrato','Mão de obra','Terceiros',
@@ -433,7 +441,7 @@ const SCH={
    {k:'obra',l:'Projeto (rateio)',t:'ref',col:'obras',lab:'codigo'},campoCL,campoCC,
    {k:'status',l:'Status',t:'select',opts:['Pendente','Pago','Recebido','Atrasado'],req:1},
    {k:'pagamento',l:'Data de liquidação',t:'date'},campoConta,
-   {k:'conta_plano',l:'Conta do plano de contas',t:'ref',col:'plano_contas',lab:'codigo',filtro:c=>c.natureza==='Analítica'&&ativo(c),rotulo:c=>(c.codigo?c.codigo+' · ':'')+c.nome,full:1}]},
+   {k:'conta_gerencial',l:'Conta do plano gerencial',t:'ref',col:'plano_gerencial',lab:'codigo',filtro:c=>c.natureza==='Analítica'&&ativo(c),rotulo:c=>(c.codigo?c.codigo+' · ':'')+c.nome,full:1}]},
  contas_bancarias:{t:'Conta bancária',fem:1,cancelavel:1,f:[
    {k:'nome',l:'Apelido da conta',req:1},{k:'banco',l:'Banco (escolha da lista ou digite)',lista:'BANCOS'},
    {k:'logo',l:'Logo do banco',t:'imagem',full:1},
@@ -516,8 +524,8 @@ function editRec(col,id,after,preset){
   if(c)c.onclick=async()=>{
     if(ativo(rec)){
       const cen=col.startsWith('centros_'),kc=col==='centros_lucro'?'centro_lucro':'centro_custo';
-      const uso=col==='canais'?S.oportunidades.filter(o=>o.canal===id).length:cen?S.obras.filter(o=>o[kc]===id).length:col==='servicos'?S.orcamentos.filter(o=>(o.itens||[]).some(i=>i.ref===id)).length:col==='categorias_servico'?S.servicos.filter(x=>x.categoria===id).length:col==='colaboradores'?S.os.filter(x=>x.tecnico===id).length+S.oportunidades.filter(x=>x.responsavel===id).length+vendasDoVendedor(id).length:col==='parceiros'?S.oportunidades.filter(x=>x.parceiro===id).length:col==='plano_contas'?S.financeiro.filter(x=>x.conta_plano===id).length+S.servicos.filter(x=>x.conta_contabil===id).length:S.produtos.filter(p=>p.familia===id||p.categoria===id).length;
-      if(!await ask('Cancelar "'+rec.nome+'"?'+(uso?' '+uso+(col==='canais'?' oportunidade(s)':cen?' projeto(s)':col==='servicos'?' orçamento(s)':col==='categorias_servico'?' serviço(s)':(col==='colaboradores'||col==='parceiros'||col==='plano_contas')?' registro(s)':' produto(s)')+' usam este registro e continuam com ele, mas ele deixa de aparecer em novos cadastros.':'')))return;
+      const uso=col==='canais'?S.oportunidades.filter(o=>o.canal===id).length:cen?S.obras.filter(o=>o[kc]===id).length:col==='servicos'?S.orcamentos.filter(o=>(o.itens||[]).some(i=>i.ref===id)).length:col==='categorias_servico'?S.servicos.filter(x=>x.categoria===id).length:col==='colaboradores'?S.os.filter(x=>x.tecnico===id).length+S.oportunidades.filter(x=>x.responsavel===id).length+vendasDoVendedor(id).length:col==='parceiros'?S.oportunidades.filter(x=>x.parceiro===id).length:col==='plano_gerencial'?S.financeiro.filter(x=>x.conta_gerencial===id).length+S.servicos.filter(x=>x.conta_gerencial===id).length:col==='plano_contas'?S.plano_gerencial.filter(x=>x.conta_contabil===id).length:S.produtos.filter(p=>p.familia===id||p.categoria===id).length;
+      if(!await ask('Cancelar "'+rec.nome+'"?'+(uso?' '+uso+(col==='canais'?' oportunidade(s)':cen?' projeto(s)':col==='servicos'?' orçamento(s)':col==='categorias_servico'?' serviço(s)':(col==='colaboradores'||col==='parceiros'||col==='plano_contas'||col==='plano_gerencial')?' registro(s)':' produto(s)')+' usam este registro e continuam com ele, mas ele deixa de aparecer em novos cadastros.':'')))return;
       rec.status='Cancelada';
     }else rec.status='Ativa';
     put(col,rec);toast(rec.status==='Ativa'?'Reativado':'Cancelado');fim();
@@ -531,7 +539,7 @@ const NAV=[
  {g:'Comercial',i:[['clientes','Clientes','◎'],['oportunidades','Oportunidades','↗'],['orcamentos','Orçamentos','▤'],['vendas','Vendas','✓']]},
  {g:'Operação',i:[['obras','Projetos','⌂'],['os','Ordens de serviço','☎'],['agenda','Agenda','▦']]},
  {g:'Compras',i:[['compras','Pedido de Compra','⇄'],['estoque','Estoque','▣']]},
- {g:'Financeiro',i:[['financeiro','Pagar e receber','$'],['bancos','Contas bancárias','▭'],['conciliacao','Conciliação','⇋'],['fluxo','Fluxo de caixa','≈'],['dre','DRE gerencial','◱']]},
+ {g:'Financeiro',i:[['financeiro','Pagar e receber','$'],['bancos','Contas bancárias','▭'],['conciliacao','Conciliação','⇋'],['fluxo','Fluxo de caixa','≈'],['dre','DRE gerencial','◱'],['dre_contabil','DRE contábil','◲']]},
  {g:'Gestão',i:[['contratos','Contratos','⎘']]},
  {g:'Sistema',i:[['cadastros','Cadastros','⚙']]}
 ];
@@ -544,7 +552,7 @@ const SUB={painel:'Visão geral da operação',clientes:'Base, histórico e rent
  contratos:'Manutenção recorrente e SLA',estoque:'Multilocal: almoxarifado, técnico e obra',
  compras:'Pedidos, fornecedores e importação de XML',financeiro:'Contas a pagar e a receber',
  bancos:'Contas bancárias e saldos',conciliacao:'Importação de extratos e conciliação bancária',
- fluxo:'Projeção unificada de entradas e saídas',dre:'Resultado gerencial por vertical',
+ dre_contabil:'Resultado contábil a partir do plano gerencial vinculado',fluxo:'Projeção unificada de entradas e saídas',dre:'Resultado gerencial por vertical',
  cadastros:'Produtos, serviços, equipe e locais'};
 let route='painel';
 function go(k){route=k;if(k==='cadastros')cadTab='empresas';document.getElementById('side').classList.remove('open');render();window.scrollTo(0,0)}
@@ -585,7 +593,7 @@ function render(){
   drawUnid();
   drawNav();
   document.getElementById('ttl').textContent=(NAV.flatMap(g=>g.i).find(i=>i[0]===route)||[,'Painel'])[1];
-  document.getElementById('sub').textContent=(SUB[route]||'')+(UNID&&['painel','vendas','orcamentos','obras','os','contratos','estoque','compras','financeiro','bancos','conciliacao','fluxo','dre','marketing'].includes(route)?' · '+nomeUnid(UNID):'');
+  document.getElementById('sub').textContent=(SUB[route]||'')+(UNID&&['painel','vendas','orcamentos','obras','os','contratos','estoque','compras','financeiro','bancos','conciliacao','fluxo','dre','dre_contabil','marketing'].includes(route)?' · '+nomeUnid(UNID):'');
   const v=document.getElementById('view');
   v.innerHTML='';
   (R[route]||R.painel)(v);
@@ -2292,17 +2300,18 @@ function dreCentros(ano,pertence){
   return{lucro:Object.values(L).sort((a,b)=>b.rec-a.rec),custo:Object.values(C).sort((a,b)=>(!a.id)-(!b.id)||(b.mat+b.mo+b.ter+b.desp)-(a.mat+a.mo+a.ter+a.desp))};
 }
 R.dre=v=>{
-  const ano=hoje().slice(0,4), d=dreCalc(ano,naUnid), receita=d.receita;
+  const ano=hoje().slice(0,4), d=dreCalc(ano,naUnid), G=S.plano_gerencial.length?dreGerencial(ano,naUnid):null, receita=G?G.r.receita:d.receita;
   const lin=(l,x,b,neg)=>'<tr><td'+(b?' class="s"':'')+'>'+l+'</td><td class="n'+(b?' s':'')+'">'+
     (neg?'('+money(x)+')':money(x))+'</td><td class="n">'+(receita?pct(x/receita*100):'—')+'</td></tr>';
   const porUnid=!UNID&&multiUnid();
-  v.innerHTML='<div class="kpis">'+kpi('Receita '+ano,money(receita))+kpi('Custo direto',money(d.cd))+
-    kpi('Margem de contribuição',receita?pct(d.mc/receita*100):'—',money(d.mc))+
-    kpi('Resultado',money(d.res),receita?pct(d.res/receita*100)+' da receita':'')+'</div>'+
+  const K=G?{cd:G.r.custos+0,mc:G.r.margem,res:G.r.liquido}:d;
+  v.innerHTML='<div class="kpis">'+kpi('Receita bruta '+ano,money(receita))+kpi('Custo direto',money(K.cd))+
+    kpi('Margem de contribuição',receita?pct(K.mc/receita*100):'—',money(K.mc))+
+    kpi('Resultado',money(K.res),receita?pct(K.res/receita*100)+' da receita':'')+'</div>'+
     '<div class="cols21">'+
     '<div class="card"><div class="chead"><h2>DRE gerencial · '+ano+(UNID?' · '+esc(nomeUnid(UNID)):porUnid?' · consolidado':'')+'</h2>'+
     '<span class="hint">regime de competência simplificado</span></div>'+
-    '<div class="cbody scr"><table><thead><tr><th>Linha</th><th class="n">Valor</th><th class="n">% receita</th></tr></thead><tbody>'+
+    '<div class="cbody scr" id="dg"><table><thead><tr><th>Linha</th><th class="n">Valor</th><th class="n">% receita</th></tr></thead><tbody>'+
     lin('Receita bruta',receita,1)+VERTICAIS.map(x=>lin('&nbsp;&nbsp;'+x,d.porVert[x]||0)).join('')+
     (d.porVert['Outros']?lin('&nbsp;&nbsp;Outros',d.porVert['Outros']):'')+
     lin('(−) Material aplicado',d.material,0,1)+lin('(−) Mão de obra técnica',d.mo,0,1)+lin('(−) Terceiros',d.terceiros,0,1)+
@@ -2314,11 +2323,10 @@ R.dre=v=>{
     (porUnid?'<div class="card"><div class="chead"><h2>Resultado por unidade · '+ano+'</h2></div><div class="cbody" id="du"></div></div>':'')+
     '<div class="card"><div class="chead"><h2>Resultado por centro de lucro · '+ano+'</h2></div><div class="cbody" id="dl"></div></div>'+
     '<div class="card"><div class="chead"><h2>Custos e despesas por centro de custo · '+ano+'</h2></div><div class="cbody" id="dc"></div></div>'+
-    '<div class="card"><div class="chead"><h2>Resultado por conta do plano · '+ano+'</h2></div><div class="cbody scr" id="dp"></div></div>'+
     '<div class="note">Mão de obra vem dos apontamentos de hora, não de lançamentos financeiros — é o custo real aplicado nos projetos, incluindo as horas de garantia.'+
     (porUnid?' Cada lançamento pertence à unidade informada nele ou, na falta, à unidade do projeto ou venda de origem.':'')+'</div>';
   chartBars(document.getElementById('cv'),[VERTICAIS.map(x=>d.porVert[x]||0)],VERTICAIS,['var(--brand)']);
-  drePlano(ano);
+  if(G)document.getElementById('dg').innerHTML=G.html;else document.getElementById('dg').insertAdjacentHTML('beforeend','<div class="note">Carregue o plano gerencial em Cadastros → Plano gerencial para ver o DRE por conta.</div>');
   const dc=dreCentros(ano,naUnid);
   document.getElementById('dl').innerHTML=tbl([{l:'Centro de lucro',s:1,f:r=>esc(nomeCentro('lucro',r.id))},
     {l:'Receita',n:1,f:r=>money(r.rec)},{l:'Custo direto',n:1,f:r=>money(r.cd)},
@@ -2822,17 +2830,17 @@ function editarEmpresa(id,after,aba){
 /* ---------- cadastros ---------- */
 let cadTab='empresas';
 R.cadastros=v=>{
-  const abas=[['empresas','Empresas'],['centros_lucro','Centros de lucro'],['centros_custo','Centros de custo'],['plano_contas','Plano de contas'],['produtos','Produtos'],['familias','Famílias'],['categorias','Categorias'],['servicos','Serviços'],['categorias_servico','Categorias de serviço'],
+  const abas=[['empresas','Empresas'],['centros_lucro','Centros de lucro'],['centros_custo','Centros de custo'],['plano_gerencial','Plano gerencial'],['plano_contas','Plano contábil'],['produtos','Produtos'],['familias','Famílias'],['categorias','Categorias'],['servicos','Serviços'],['categorias_servico','Categorias de serviço'],
     ['colaboradores','Equipe'],['parceiros','Parceiros'],['locais','Locais de estoque'],['fornecedores','Fornecedores']];
-  const rotNovo={empresas:'+ Nova empresa',centros_lucro:'+ Novo centro de lucro',centros_custo:'+ Novo centro de custo',plano_contas:'+ Nova conta',produtos:'+ Novo produto',familias:'+ Nova família',categorias:'+ Nova categoria',servicos:'+ Novo serviço',categorias_servico:'+ Nova categoria de serviço',
+  const rotNovo={empresas:'+ Nova empresa',centros_lucro:'+ Novo centro de lucro',centros_custo:'+ Novo centro de custo',plano_gerencial:'+ Nova conta gerencial',plano_contas:'+ Nova conta contábil',produtos:'+ Novo produto',familias:'+ Nova família',categorias:'+ Nova categoria',servicos:'+ Novo serviço',categorias_servico:'+ Nova categoria de serviço',
     colaboradores:'+ Novo colaborador',parceiros:'+ Novo parceiro',locais:'+ Novo local',fornecedores:'+ Novo fornecedor'};
   v.innerHTML='<div class="tabs">'+abas.map(a=>'<button class="tab'+(cadTab===a[0]?' on':'')+'" data-tab="'+a[0]+'">'+a[1]+'</button>').join('')+'</div>'+
     '<div class="toolbar"><button class="btn" id="nv">'+rotNovo[cadTab]+'</button>'+
     (cadTab==='produtos'?'<select id="fTp"><option value="">Simples e kits</option><option>Simples</option><option>Kit</option></select>'+
       '<select id="fFm"><option value="">Todas as famílias</option>'+S.familias.map(f=>'<option value="'+f.id+'">'+esc(f.nome)+'</option>').join('')+'</select>'+
       '<input type="text" id="fBu" placeholder="Buscar SKU ou descrição…">':'')+
-    ((['familias','categorias','centros_lucro','centros_custo','categorias_servico','plano_contas'].includes(cadTab))?'<button class="btn sec sm" id="padrao">'+(cadTab==='plano_contas'?'Carregar plano padrão':'Carregar lista padrão')+'</button>':'')+(cadTab==='plano_contas'?'<button class="btn sec sm" id="impc">Importar de arquivo (CSV)</button><button class="btn sec sm" id="modc">Baixar modelo</button><input type="file" id="fpc" accept=".csv,.txt" style="display:none"><button class="btn sec sm" id="clas">Classificar lançamentos existentes</button>':'')+
-    ((['empresas','centros_lucro','centros_custo','produtos','familias','categorias','servicos','categorias_servico','colaboradores','parceiros','plano_contas'].includes(cadTab))?'<label style="font-size:12.5px;color:var(--dim);display:flex;gap:6px;align-items:center">'+
+    ((['familias','categorias','centros_lucro','centros_custo','categorias_servico','plano_contas','plano_gerencial'].includes(cadTab))?'<button class="btn sec sm" id="padrao">'+((cadTab==='plano_contas'||cadTab==='plano_gerencial')?'Carregar plano padrão':'Carregar lista padrão')+'</button>':'')+((cadTab==='plano_contas'||cadTab==='plano_gerencial')?'<button class="btn sec sm" id="impc">Importar de arquivo (CSV)</button><button class="btn sec sm" id="modc">Baixar modelo</button><input type="file" id="fpc" accept=".csv,.txt" style="display:none">'+(cadTab==='plano_gerencial'?'<button class="btn sec sm" id="clas">Classificar lançamentos existentes</button>':'')+'':'')+
+    ((['empresas','centros_lucro','centros_custo','produtos','familias','categorias','servicos','categorias_servico','colaboradores','parceiros','plano_contas','plano_gerencial'].includes(cadTab))?'<label style="font-size:12.5px;color:var(--dim);display:flex;gap:6px;align-items:center">'+
       '<input type="checkbox" id="fCa"'+(verCancelados?' checked':'')+'> mostrar cancelados</label>':'')+'</div>'+
     '<div class="card"><div class="cbody" id="lst"></div></div>'+
     '<div class="card"><div class="chead"><h2>Dados</h2></div><div class="cbody">'+
@@ -2844,11 +2852,11 @@ R.cadastros=v=>{
   v.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{cadTab=b.dataset.tab;render()});
   document.getElementById('nv').onclick=()=>editRec(cadTab,null);
   const pd=document.getElementById('padrao');
-  const ip=document.getElementById('impc');if(ip){ip.onclick=()=>document.getElementById('fpc').click();document.getElementById('fpc').onchange=e=>importarPlanoArquivo(e.target.files);
-    document.getElementById('modc').onclick=()=>baixarArquivo('modelo-plano-de-contas.csv','\uFEFF'+MODELO_PLANO)}
+  const ip=document.getElementById('impc');if(ip){ip.onclick=()=>document.getElementById('fpc').click();document.getElementById('fpc').onchange=e=>{importarPlanoArquivo(e.target.files,cadTab);e.target.value=''};
+    document.getElementById('modc').onclick=()=>baixarArquivo('modelo-'+PLANOS[cadTab].arq+'.csv','\uFEFF'+MODELO_PLANO[cadTab])}
   const cl2=document.getElementById('clas');
-  if(cl2)cl2.onclick=async()=>{if(!(await ask('Atribuir uma conta do plano aos lançamentos que ainda não têm, a partir da categoria de cada um? Você pode ajustar depois em cada lançamento.','Classificar')))return;toast(classificarLancamentos()+' lançamento(s) classificado(s)');render()};
-  if(pd)pd.onclick=()=>{if(cadTab==='plano_contas'){toast(planoPadrao()+' conta(s) criada(s)');render();return}
+  if(cl2)cl2.onclick=async()=>{if(!(await ask('Atribuir uma conta gerencial aos lançamentos que ainda não têm, a partir da categoria de cada um? Você pode ajustar depois em cada lançamento.','Classificar')))return;toast(classificarLancamentos()+' lançamento(s) classificado(s)');render()};
+  if(pd)pd.onclick=()=>{if(cadTab==='plano_contas'||cadTab==='plano_gerencial'){toast(carregarPlano(cadTab)+' conta(s) criada(s)');render();return}
     if(cadTab==='categorias_servico'){CATEGORIAS_SERVICO_PADRAO.forEach(n=>{if(!S.categorias_servico.some(x=>String(x.nome).toLowerCase()===n.toLowerCase()))put('categorias_servico',{nome:n,status:'Ativa'})});toast('Categorias padrão carregadas');render();return}
     if(cadTab.startsWith('centros_')){centrosPadrao();toast('Centros padrão carregados');render();return}
     const n=listaPadrao();toast('Famílias e categorias padrão carregadas'+(n?' · '+n+' produto(s) convertidos':''));render()};
@@ -2912,11 +2920,18 @@ R.cadastros=v=>{
     categorias_servico:[{l:'Categoria',k:'nome',s:1},{l:'Descrição',k:'descricao'},
       {l:'Serviços',n:1,f:r=>S.servicos.filter(x=>x.categoria===r.id).length},
       {l:'Status',f:r=>'<span class="bg '+(ativo(r)?'g-green':'g-red')+'">'+(ativo(r)?'Ativa':'Cancelada')+'</span>'}],
+    plano_gerencial:[{l:'Código',s:1,f:r=>'<span style="padding-left:'+(nivelConta(r)*14)+'px;'+(r.natureza==='Sintética'?'font-weight:600':'')+'">'+esc(r.codigo)+'</span>'},
+      {l:'Conta',f:r=>'<span style="'+(r.natureza==='Sintética'?'font-weight:600':'')+'">'+esc(r.nome)+'</span>'},
+      {l:'Tipo',f:r=>'<span class="bg '+({Receita:'g-green','Receita financeira':'g-green',Dedução:'g-amber',Custo:'g-amber',Despesa:'g-red','Despesa financeira':'g-red','Imposto sobre o lucro':'g-red',Ativo:'g-accent',Passivo:'g-purple','Patrimônio líquido':'g-purple'}[r.tipo]||'g-gray')+'">'+esc(r.tipo||'—')+'</span>'},
+      {l:'Natureza',k:'natureza'},
+      {l:'Conta contábil',f:r=>r.natureza!=='Analítica'?'—':(r.conta_contabil&&byId('plano_contas',r.conta_contabil)?esc(rotConta2(byId('plano_contas',r.conta_contabil))):'<span class="bg g-amber">sem vínculo</span>')},
+      {l:'Lançamentos',n:1,f:r=>r.natureza==='Analítica'?S.financeiro.filter(l=>l.conta_gerencial===r.id).length:'—'},
+      {l:'Status',f:r=>'<span class="bg '+(ativo(r)?'g-green':'g-red')+'">'+(ativo(r)?'Ativa':'Cancelada')+'</span>'}],
     plano_contas:[{l:'Código',s:1,f:r=>'<span style="padding-left:'+(nivelConta(r)*14)+'px;'+(r.natureza==='Sintética'?'font-weight:600':'')+'">'+esc(r.codigo)+'</span>'},
       {l:'Conta',f:r=>'<span style="'+(r.natureza==='Sintética'?'font-weight:600':'')+'">'+esc(r.nome)+'</span>'},
-      {l:'Tipo',f:r=>'<span class="bg '+({Receita:'g-green',Custo:'g-amber',Despesa:'g-red',Ativo:'g-accent',Passivo:'g-purple'}[r.tipo]||'g-gray')+'">'+esc(r.tipo||'—')+'</span>'},
-      {l:'Natureza',k:'natureza'},{l:'Linha do DRE',f:r=>esc(r.categoria_dre||'—')},
-      {l:'Lançamentos',n:1,f:r=>r.natureza==='Analítica'?S.financeiro.filter(l=>l.conta_plano===r.id).length:'—'},
+      {l:'Tipo',f:r=>'<span class="bg '+({Receita:'g-green','Receita financeira':'g-green',Dedução:'g-amber',Custo:'g-amber',Despesa:'g-red','Despesa financeira':'g-red','Imposto sobre o lucro':'g-red',Ativo:'g-accent',Passivo:'g-purple','Patrimônio líquido':'g-purple'}[r.tipo]||'g-gray')+'">'+esc(r.tipo||'—')+'</span>'},
+      {l:'Natureza',k:'natureza'},
+      {l:'Contas gerenciais',n:1,f:r=>r.natureza==='Analítica'?S.plano_gerencial.filter(g=>g.conta_contabil===r.id).length:'—'},
       {l:'Status',f:r=>'<span class="bg '+(ativo(r)?'g-green':'g-red')+'">'+(ativo(r)?'Ativa':'Cancelada')+'</span>'}],
     colaboradores:[{l:'Nome',k:'nome',s:1},{l:'Tipo',f:r=>r.tipo?'<span class="bg '+(r.tipo==='Técnico'?'g-brand':r.tipo==='Vendedor'?'g-accent':'g-gray')+'">'+esc(r.tipo)+'</span>':'<span style="color:var(--faint)">definir</span>'},
       {l:'Função',k:'funcao'},{l:'Contato',f:r=>esc([r.telefone,r.email].filter(Boolean).join(' · ')||'—')},
@@ -2941,9 +2956,9 @@ R.cadastros=v=>{
   };
   const desenhar=()=>{
     let rows=S[cadTab].slice();
-    if(['empresas','centros_lucro','centros_custo','produtos','familias','categorias','servicos','categorias_servico','colaboradores','parceiros','plano_contas'].includes(cadTab)){
+    if(['empresas','centros_lucro','centros_custo','produtos','familias','categorias','servicos','categorias_servico','colaboradores','parceiros','plano_contas','plano_gerencial'].includes(cadTab)){
       if(!verCancelados)rows=rows.filter(ativo);
-      if(cadTab==='plano_contas')rows.sort(cmpCodigo);else rows.sort((a,b)=>(ativo(b)-ativo(a))||String(a.nome).localeCompare(String(b.nome)));
+      if(cadTab==='plano_contas'||cadTab==='plano_gerencial')rows.sort(cmpCodigo);else rows.sort((a,b)=>(ativo(b)-ativo(a))||String(a.nome).localeCompare(String(b.nome)));
     }
     if(cadTab==='empresas'){
       const mats=rows.filter(x=>x.tipo==='Matriz').sort((a,b)=>String(a.razao_social).localeCompare(String(b.razao_social)));
