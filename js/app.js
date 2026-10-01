@@ -1177,7 +1177,8 @@ R.obras=v=>{
     '<select id="fv"><option value="">Todas as verticais</option>'+VERTICAIS.map(x=>'<option>'+x+'</option>').join('')+'</select>'+
     '<select id="fc"><option value="">Todos os centros de lucro</option>'+S.centros_lucro.map(c=>'<option value="'+c.id+'">'+esc(rotCentro(c))+'</option>').join('')+'</select></div>'+
     '<div class="kpis" id="kp"></div><div class="card"><div class="cbody" id="lst"></div></div>';
-  document.getElementById('np').onclick=()=>novoProjeto();
+  document.getElementById('np').onclick=async()=>{
+    if(await ask('Projetos normalmente nascem sozinhos quando um orçamento é convertido em venda, já com as parcelas a receber. Um projeto criado aqui é avulso: não tem venda nem contas a receber automáticas, e as parcelas precisam ser lançadas à mão em Financeiro, escolhendo este projeto.\n\nCriar projeto avulso mesmo assim?','Criar projeto avulso'))novoProjeto()};
   const draw=()=>{
     const fs=document.getElementById('fs').value,fv=document.getElementById('fv').value;
     const fc=document.getElementById('fc').value;
@@ -1679,7 +1680,8 @@ function telaContratosVenda(v){
     '<div class="toolbar"><button class="btn" id="ncv">+ Novo contrato de venda</button></div>'+
     '<div class="note" style="margin:-4px 0 12px">Os contratos de venda nascem sozinhos quando uma venda é registrada. Use o botão acima para um contrato avulso, sem orçamento nem venda. Abra um contrato para baixar o documento, registrar a assinatura e anexar a via assinada.</div>'+
     '<div class="card"><div class="cbody" id="lst"></div></div>');
-  document.getElementById('ncv').onclick=()=>novoContratoVenda();
+  document.getElementById('ncv').onclick=async()=>{
+    if(await ask('Contratos de venda normalmente nascem sozinhos quando uma venda é registrada, já ligados às parcelas a receber. Um contrato criado aqui é avulso: não tem venda nem contas a receber automáticas, e as parcelas precisam ser lançadas à mão em Financeiro.\n\nCriar contrato avulso mesmo assim?','Criar contrato avulso'))novoContratoVenda()};
   const el=document.getElementById('lst');
   el.innerHTML=tbl([{l:'Nº',k:'numero',s:1},{l:'Cliente',f:r=>esc(nm('clientes',r.cliente))}].concat(colUnid('contratos'),[
     {l:'Venda',f:r=>esc(nm('vendas',r.venda,'numero'))+(r.obra?' · '+esc(nm('obras',r.obra,'codigo')):'')},
