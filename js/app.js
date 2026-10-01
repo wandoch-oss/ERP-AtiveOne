@@ -427,7 +427,7 @@ const SUB={painel:'Visão geral da operação',clientes:'Base, histórico e rent
  fluxo:'Projeção unificada de entradas e saídas',dre:'Resultado gerencial por vertical',
  cadastros:'Produtos, serviços, equipe e locais'};
 let route='painel';
-function go(k){route=k;document.getElementById('side').classList.remove('open');render();window.scrollTo(0,0)}
+function go(k){route=k;if(k==='cadastros')cadTab='empresas';document.getElementById('side').classList.remove('open');render();window.scrollTo(0,0)}
 function drawNav(){
   const el=document.getElementById('side');
   let h='<div class="logo"><i></i> Ative One</div>';
@@ -2666,7 +2666,7 @@ function editarEmpresa(id,after,aba){
 }
 
 /* ---------- cadastros ---------- */
-let cadTab='produtos';
+let cadTab='empresas';
 R.cadastros=v=>{
   const abas=[['empresas','Empresas'],['centros_lucro','Centros de lucro'],['centros_custo','Centros de custo'],['produtos','Produtos'],['familias','Famílias'],['categorias','Categorias'],['servicos','Serviços'],
     ['colaboradores','Equipe'],['locais','Locais de estoque'],['fornecedores','Fornecedores']];
