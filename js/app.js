@@ -11,6 +11,7 @@ const limpo=o=>JSON.parse(JSON.stringify(o));
 const erroSalvar=e=>toast('Falha ao salvar: '+((e&&(e.code||e.message))||'erro'));
 function save(c,op){
   op=op||{type:'all'};
+  if(MODE==='supabase')return sbSalvar(c,op);
   if(MODE==='firebase'){
     if(op.type==='upsert')return FB.collection(c).doc(op.rec.id).set(limpo(op.rec)).catch(erroSalvar);
     if(op.type==='remove')return FB.collection(c).doc(op.id).delete().catch(erroSalvar);
@@ -2730,6 +2731,7 @@ async function subirArquivo(file,pasta){
   const ext=(String(file.name).split('.').pop()||'').toLowerCase(), type=TIPOS_ARQ[ext];
   if(!type)throw{code:'unsupported_type'};
   if(file.size>20*1048576)throw{code:'too_large'};
+  if(MODE==='supabase')return sbSubirArquivo(file,pasta,type);
   if(MODE==='firebase'){
     let st;try{st=firebase.storage()}catch(e){throw{code:'sem_storage'}}
     const path=pasta+'/'+uid()+'-'+String(file.name).replace(/[^\w.\-]/g,'_');
@@ -2743,11 +2745,12 @@ async function subirArquivo(file,pasta){
 }
 async function removerArquivo(d){
   try{
-    if(d.ref&&MODE==='firebase')await firebase.storage().ref(d.ref).delete();
+    if(d.sbpath&&MODE==='supabase')await sbRemoverArquivo(d);
+    else if(d.ref&&MODE==='firebase')await firebase.storage().ref(d.ref).delete();
     else if(d.asset){if(!ASSETS&&typeof claude!=='undefined')ASSETS=await claude.use('assets');if(ASSETS)await ASSETS.delete(d.asset)}
   }catch(e){}
 }
-const urlDoc=d=>d.url||(d.asset?'/_blob/'+d.asset:'');
+const urlDoc=d=>d.url||(d.sbpath?(SB_URLS[d.sbpath]||'#'):(d.asset?'/_blob/'+d.asset:''));
 const erroUpload=e=>({unsupported_type:'Envie PDF ou imagem (PNG, JPG, WEBP). Arquivos do Word ou DWG precisam ser salvos em PDF antes.',
   too_large:'Arquivo acima de 20 MB.',quota_or_state:'O espaço de armazenamento de arquivos está cheio.',
   not_granted:'Seu acesso a este sistema não permite enviar arquivos.',rate_limited:'Muitos envios seguidos — aguarde alguns segundos.',
@@ -2942,11 +2945,12 @@ R.cadastros=v=>{
     '<div class="card"><div class="chead"><h2>Dados</h2></div><div class="cbody">'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sec sm" id="demo">Carregar dados de exemplo</button>'+
     '<button class="btn sec sm" id="exp">Exportar backup</button><button class="btn sec sm" id="imp">Importar backup</button>'+
-    '<button class="btn dgr sm" id="zap">Apagar tudo</button><input type="file" id="fimp" accept=".json" style="display:none"></div>'+
-    '<div class="note">Os dados ficam salvos automaticamente. Use Exportar e Importar backup para levar os dados daqui para o Firebase. '+
+    (MODE==='supabase'&&ORG_PAPEL==='admin'?'<button class="btn sec sm" id="acesso">Dar acesso a um usuário</button>':'')+'<button class="btn dgr sm" id="zap">Apagar tudo</button><input type="file" id="fimp" accept=".json" style="display:none"></div>'+
+    '<div class="note">Os dados ficam salvos automaticamente. '+(MODE==='supabase'?'Banco: Supabase ('+esc(ORG_NOME||'')+'). ':'Use Exportar e Importar backup para levar os dados daqui para o Supabase. ')+
     '"Apagar tudo" remove todos os registros deste sistema.</div></div></div>';
   v.querySelectorAll('[data-tab],[data-grp]').forEach(b=>b.onclick=()=>{cadTab=b.dataset.tab||b.dataset.grp;render()});
   document.getElementById('nv').onclick=()=>editRec(cadTab,null);
+  const ac=document.getElementById('acesso');if(ac)ac.onclick=()=>sbDarAcesso();
   const pd=document.getElementById('padrao');
   const ip=document.getElementById('impc');if(ip){ip.onclick=()=>document.getElementById('fpc').click();document.getElementById('fpc').onchange=e=>{importarPlanoArquivo(e.target.files,cadTab);e.target.value=''};
     document.getElementById('modc').onclick=()=>baixarArquivo('modelo-'+PLANOS[cadTab].arq+'.csv','\uFEFF'+MODELO_PLANO[cadTab])}
@@ -3316,6 +3320,7 @@ function iniciarSessao(u){
 }
 
 async function boot(){
+  if(typeof temSupabase==='function'&&temSupabase())return bootSupabase();
   const temClaudeRt=typeof claude!=='undefined'&&claude&&claude.use;
   if(!temClaudeRt&&location.protocol.startsWith('http')){
     const cfg=await fetch('/__/firebase/init.json').then(r=>r.ok?r.json():null).catch(()=>null);
