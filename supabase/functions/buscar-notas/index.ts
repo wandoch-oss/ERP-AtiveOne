@@ -2,7 +2,7 @@
 // com o certificado A1 da empresa e guarda os XMLs em public.fiscal_docs.
 // Passo a passo de implantação: FISCAL.md.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { envelopeDistDFe, ESPERA_MS, lerRetDistDFe, lerRetNFSe, nsu15, soDigitos, URL_DISTDFE, URL_NFSE, type Doc } from './fiscal.ts';
+import { envelopeDistDFe, envelopeEvento, ESPERA_MS, eventoCienciaAssinado, lerRetDistDFe, lerRetEvento, lerRetNFSe, nsu15, soDigitos, URL_DISTDFE, URL_EVENTO, URL_NFSE, type Doc } from './fiscal.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -17,7 +17,7 @@ type Resultado = { novos: number; status: string; msg: string; aguardar_ate?: st
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   try {
-    const { org_id, cnpj: cnpjRaw, servicos = ['nfe', 'nfse'], ambiente = 'producao', uf_codigo = '' } = await req.json();
+    const { org_id, cnpj: cnpjRaw, servicos = ['nfe', 'nfse'], ambiente = 'producao', uf_codigo = '', acao = 'buscar', chaves = [] } = await req.json();
     const cnpj = soDigitos(cnpjRaw);
     if (!org_id || cnpj.length !== 14) return json({ erro: 'Informe org_id e um CNPJ de 14 dígitos.' }, 400);
 
@@ -35,6 +35,26 @@ Deno.serve(async (req) => {
     if (!cert || !key) return json({ erro: 'Certificado não configurado (secrets CERT_PEM e KEY_PEM). Veja FISCAL.md.' }, 412);
     // deno-lint-ignore no-explicit-any
     const client = (Deno as any).createHttpClient({ cert, key, ...(ca ? { caCerts: [ca] } : {}) });
+
+    if (acao === 'ciencia') {
+      const lista = (chaves as string[]).map(soDigitos).filter((c) => c.length === 44).slice(0, 20);
+      if (!lista.length) return json({ erro: 'Nenhuma chave de 44 dígitos informada.' }, 400);
+      const resultados: Record<string, { ok: boolean; cStat: string; msg: string }> = {};
+      for (const chave of lista) { // um evento por pedido: o erro de uma nota não derruba as outras
+        try {
+          const ev = await eventoCienciaAssinado({ cnpj, chave, ambiente, certPem: cert, keyPem: key });
+          const r = await fetch(URL_EVENTO[ambiente === 'homologacao' ? 'homologacao' : 'producao'], {
+            method: 'POST', client,
+            headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento"' },
+            body: envelopeEvento(ev.evento, '1'),
+            // deno-lint-ignore no-explicit-any
+          } as any);
+          const ret = lerRetEvento(await r.text());
+          resultados[chave] = { ok: ret.ok, cStat: ret.cStat, msg: ret.xMotivo };
+        } catch (e) { resultados[chave] = { ok: false, cStat: '', msg: (e as Error).message } }
+      }
+      return json({ ciencia: resultados });
+    }
 
     const saida: Record<string, Resultado> = {};
     for (const servico of ['nfe', 'nfse'].filter((s) => servicos.includes(s))) {

@@ -17,14 +17,14 @@ sem você confirmar.
 | NF-e emitida pela empresa | Só registra na lista de notas |
 | NFS-e recebida | Registra e cria conta a pagar (vencimento em 30 dias) |
 | NFS-e emitida | Só registra |
-| Resumo de NF-e (`resNFe`) | Só lista. A SEFAZ manda o XML completo depois da *Ciência da operação* |
+| Resumo de NF-e (`resNFe`) | Botão **Dar ciência e liberar o XML**: registra a Ciência da operação (evento 210210) na Receita; o XML completo chega na próxima busca |
 
 ## Limites que vêm da Receita (não do sistema)
 - A distribuição de NF-e entrega as notas em que o CNPJ é **destinatário** (ou foi indicado para baixar o XML).
   Notas emitidas pela própria empresa normalmente não chegam por esse serviço; se chegarem, o sistema
   as reconhece pelo CNPJ do emitente. Confirme no primeiro teste.
-- Sem a **Ciência da operação** (evento assinado, feito no portal da NF-e ou no programa que você já usa),
-  a SEFAZ envia só o resumo da nota. O sistema ainda não registra esse evento.
+- Sem a **Ciência da operação** a SEFAZ envia só o resumo da nota. O sistema registra a ciência (só informa conhecimento;
+  não confirma nem recusa a compra). Confirmação, desconhecimento e operação não realizada continuam fora do sistema.
 - Depois de uma consulta sem novidades a SEFAZ exige ~1 hora de intervalo (erro 656, consumo indevido). A função
   respeita isso e avisa até que horas.
 
@@ -50,6 +50,8 @@ Para testar sem valer: em `config.js` coloque `fiscalAmbiente:'homologacao'`.
 
 ## Ainda não testado contra a Receita
 O código foi escrito pela documentação dos serviços e testado só com respostas simuladas
-(`node --experimental-strip-types supabase/functions/buscar-notas/fiscal.test.mjs`). Pontos a validar no
+(`node --experimental-strip-types supabase/functions/buscar-notas/fiscal.test.mjs` e `ciencia.test.mjs`). Pontos a validar no
 primeiro uso em homologação: se o Supabase aceita o certificado de cliente (`Deno.createHttpClient`),
-a cadeia de certificados da SEFAZ e o formato do NSU da NFS-e nacional.
+a cadeia de certificados da SEFAZ, o formato do NSU da NFS-e nacional e se a SEFAZ aceita a assinatura do evento de ciência
+(a assinatura é conferida localmente contra o C14N real, mas só a Receita valida de fato). A chave `KEY_PEM` precisa estar em
+PKCS#8 (`BEGIN PRIVATE KEY`), que é o que o comando do passo 2 gera.

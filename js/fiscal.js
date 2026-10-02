@@ -145,8 +145,8 @@ async function fiscalMostrar(){
       'Ficam registradas na lista de notas, sem mexer em estoque ou financeiro.')+
     bloco('NFS-e (serviços)','fcSrv','Registrar',g.nfse,n=>linha((n.direcao==='Emitida'?n.tomador_nome:n.prestador_nome)||'—',
       n.direcao.toLowerCase()+' · '+dBR(n.emissao),money(n.valor)),'As recebidas geram conta a pagar; as emitidas só ficam registradas.')+
-    bloco('Resumos sem itens','fcRes','Marcar como vistos',g.resumos,n=>linha(n.nome||'—',dBR(n.emissao),money(n.valor)),
-      'A Receita só envia o XML completo depois da “Ciência da operação” (portal da NF-e ou o programa que você já usa). Ele aparece aqui numa próxima busca.')
+    bloco('Resumos sem itens','fcCie','Dar ciência e liberar o XML',g.resumos,n=>linha(n.nome||'—',dBR(n.emissao),money(n.valor)),
+      'A Receita só envia o XML completo depois da “Ciência da operação”. Ela só informa que você tem conhecimento da nota — não confirma nem recusa a compra. O XML aparece aqui numa próxima busca.')
     ,null,null,true);
   const on=(id,fn)=>{const b=document.getElementById(id);if(b)b.onclick=fn};
   on('fcRec',()=>{closeM();conciliarNFe(g.recebidas,ns=>fiscalBaixar(ns.map(n=>n._k)))});
@@ -155,7 +155,7 @@ async function fiscalMostrar(){
   on('fcSrv',()=>fiscalRegistrar(g.nfse.map(n=>({modelo:'NFS-e',direcao:n.direcao,chave:n.chave,emissao:n.emissao,valor:n.valor,
     contraparte:n.direcao==='Emitida'?n.tomador_nome:n.prestador_nome,contraparte_doc:n.direcao==='Emitida'?n.tomador_doc:n.prestador_doc,
     empresa_doc:soDig(n.direcao==='Emitida'?n.prestador_doc:n.tomador_doc),descricao:n.descricao,_k:n._k}))));
-  on('fcRes',async()=>{await fiscalBaixar(g.resumos.map(n=>n._k));closeM();toast('Resumos marcados como vistos');render()});
+  on('fcCie',()=>fiscalCiencia(g.resumos));
 }
 
 async function fiscalRegistrar(notas){
@@ -175,4 +175,20 @@ async function fiscalRegistrar(notas){
   });
   await fiscalBaixar(notas.map(n=>n._k));
   closeM();toast(novas.length+' nota(s) registrada(s)');render();
+}
+
+async function fiscalCiencia(resumos){
+  const emp=fiscalEmpresa();
+  if(!await ask('Registrar a ciência da operação de '+resumos.length+' nota(s) na Receita? Isso informa que você tem conhecimento delas; não confirma nem recusa a compra.','Registrar ciência'))return;
+  const b=document.getElementById('fcCie');if(b){b.disabled=true;b.textContent='Enviando à Receita…'}
+  const {data,error}=await SB.functions.invoke('buscar-notas',{body:{acao:'ciencia',org_id:ORG,cnpj:soDig(emp.cnpj),
+    ambiente:fiscalAmbiente(),chaves:resumos.map(n=>n.chave)}});
+  if(error){let m=error.message||'erro';try{const j=await error.context.json();if(j&&j.erro)m=j.erro}catch(e){}
+    toast('Não foi possível registrar: '+m);if(b){b.disabled=false;b.textContent='Dar ciência e liberar o XML'}return}
+  const r=data.ciencia||{},feitas=resumos.filter(n=>r[n.chave]&&r[n.chave].ok),falhas=resumos.filter(n=>!(r[n.chave]&&r[n.chave].ok));
+  await fiscalBaixar(feitas.map(n=>n._k));
+  closeM();
+  toast(feitas.length+' ciência(s) registrada(s)'+(falhas.length?' · '+falhas.length+' falhou: '+((r[falhas[0].chave]||{}).msg||'erro'):'')+
+    (feitas.length?' · busque de novo para receber o XML':''));
+  render();
 }
