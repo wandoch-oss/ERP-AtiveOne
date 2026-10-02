@@ -88,11 +88,26 @@ export const dhBrasilia = (d = new Date()) =>
 
 // O XML é montado já na forma canônica (C14N 1.0): sem espaços entre tags, atributos em ordem
 // e tags vazias abertas/fechadas — assim o resumo assinado coincide com o que a SEFAZ recalcula.
-export async function eventoCienciaAssinado(o: { cnpj: string; chave: string; ambiente: string; certPem: string; keyPem: string; agora?: Date }) {
-  const id = 'ID210210' + o.chave + '01', NS = 'http://www.portalfiscal.inf.br/nfe';
+export const MANIFESTACOES: Record<string, { tp: string; desc: string }> = {
+  ciencia: { tp: '210210', desc: 'Ciencia da Operacao' },
+  confirmacao: { tp: '210200', desc: 'Confirmacao da Operacao' },
+  desconhecimento: { tp: '210220', desc: 'Desconhecimento da Operacao' },
+  nao_realizada: { tp: '210240', desc: 'Operacao nao Realizada' },
+};
+const xmlEsc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+export const eventoCienciaAssinado = (o: Parameters<typeof eventoManifestacao>[0]) => eventoManifestacao({ ...o, tipo: 'ciencia' });
+
+export async function eventoManifestacao(o: { cnpj: string; chave: string; ambiente: string; certPem: string; keyPem: string; agora?: Date; tipo?: string; justificativa?: string }) {
+  const man = MANIFESTACOES[o.tipo || 'ciencia'];
+  if (!man) throw new Error('Tipo de manifestação desconhecido: ' + o.tipo);
+  const just = String(o.justificativa || '').trim();
+  if (man.tp === '210240' && (just.length < 15 || just.length > 255)) throw new Error('A justificativa precisa ter de 15 a 255 caracteres.');
+  const id = 'ID' + man.tp + o.chave + '01', NS = 'http://www.portalfiscal.inf.br/nfe';
   const corpo = '<cOrgao>91</cOrgao><tpAmb>' + (o.ambiente === 'homologacao' ? 2 : 1) + '</tpAmb><CNPJ>' + soDigitos(o.cnpj) +
-    '</CNPJ><chNFe>' + o.chave + '</chNFe><dhEvento>' + dhBrasilia(o.agora) + '</dhEvento><tpEvento>210210</tpEvento>' +
-    '<nSeqEvento>1</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Ciencia da Operacao</descEvento></detEvento>';
+    '</CNPJ><chNFe>' + o.chave + '</chNFe><dhEvento>' + dhBrasilia(o.agora) + '</dhEvento><tpEvento>' + man.tp + '</tpEvento>' +
+    '<nSeqEvento>1</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>' + man.desc + '</descEvento>' +
+    (man.tp === '210240' ? '<xJust>' + xmlEsc(just) + '</xJust>' : '') + '</detEvento>';
   const infCanon = '<infEvento xmlns="' + NS + '" Id="' + id + '">' + corpo + '</infEvento>';
   const sha1 = async (s: string) => b64(await crypto.subtle.digest('SHA-1', new TextEncoder().encode(s)));
   const digest = await sha1(infCanon);

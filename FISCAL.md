@@ -19,12 +19,21 @@ sem você confirmar.
 | NFS-e emitida | Mesmo tratamento da NF-e emitida |
 | Resumo de NF-e (`resNFe`) | Botão **Dar ciência e liberar o XML**: registra a Ciência da operação (evento 210210) na Receita; o XML completo chega na próxima busca |
 
+## Manifestação do destinatário
+Na lista **Notas importadas**, a coluna *Manifestação* tem o botão **Manifestar** para NF-e recebidas:
+Confirmação da operação (210200), Desconhecimento (210220) e Operação não realizada (210240, com justificativa de 15 a 255
+caracteres). A Receita registra e não aceita desfazer. A *Ciência* continua sendo feita pelo botão dos resumos.
+
+## Aviso de notas paradas
+Notas buscadas e ainda não conferidas aparecem como selo no menu (Pedido de Compra) e no Painel, em vermelho quando
+passam de 3 dias.
+
 ## Limites que vêm da Receita (não do sistema)
 - A distribuição de NF-e entrega as notas em que o CNPJ é **destinatário** (ou foi indicado para baixar o XML).
   Notas emitidas pela própria empresa normalmente não chegam por esse serviço; se chegarem, o sistema
   as reconhece pelo CNPJ do emitente. Confirme no primeiro teste.
 - Sem a **Ciência da operação** a SEFAZ envia só o resumo da nota. O sistema registra a ciência (só informa conhecimento;
-  não confirma nem recusa a compra). Confirmação, desconhecimento e operação não realizada continuam fora do sistema.
+  não confirma nem recusa a compra).
 - Depois de uma consulta sem novidades a SEFAZ exige ~1 hora de intervalo (erro 656, consumo indevido). A função
   respeita isso e avisa até que horas.
 
@@ -45,12 +54,26 @@ sem você confirmar.
 4. Publique a função: `supabase functions deploy buscar-notas`
 5. Apague `cert.pem` e `key.pem` do computador.
 6. Cadastre a empresa com **CNPJ válido e UF** (Cadastros → Empresas) e use o botão em Compras.
+7. **Busca automática diária** (opcional, faça só depois de validar a busca manual em homologação):
+   - `supabase secrets set CRON_SECRET="uma-frase-longa-e-aleatoria"`
+   - No SQL Editor (troque os três valores em maiúsculas; 09:00 UTC = 06:00 em Brasília):
+     ```sql
+     create extension if not exists pg_cron;
+     create extension if not exists pg_net;
+     select cron.schedule('buscar-notas-diario', '0 9 * * *', $$
+       select net.http_post(
+         url := 'https://SEU-PROJETO.supabase.co/functions/v1/buscar-notas',
+         headers := '{"Content-Type":"application/json","Authorization":"Bearer CHAVE-ANON","x-cron-secret":"MESMA-FRASE"}'::jsonb,
+         body := '{"acao":"agendada"}'::jsonb) $$);
+     ```
+   - No sistema, em Compras → Buscar notas na Receita, o administrador clica em **Ligar** na busca automática.
+     Só os CNPJs ligados são consultados. Para parar: **Desligar** (ou `select cron.unschedule('buscar-notas-diario');`).
 
 Para testar sem valer: em `config.js` coloque `fiscalAmbiente:'homologacao'`.
 
 ## Ainda não testado contra a Receita
 O código foi escrito pela documentação dos serviços e testado só com respostas simuladas
-(`node --experimental-strip-types supabase/functions/buscar-notas/fiscal.test.mjs` e `ciencia.test.mjs`). Pontos a validar no
+(`node --experimental-strip-types supabase/functions/buscar-notas/fiscal.test.mjs` e `ciencia.test.mjs`; a Edge Function em si — `index.ts` — nunca rodou, só foi lida pelo analisador). Pontos a validar no
 primeiro uso em homologação: se o Supabase aceita o certificado de cliente (`Deno.createHttpClient`),
 a cadeia de certificados da SEFAZ, o formato do NSU da NFS-e nacional e se a SEFAZ aceita a assinatura do evento de ciência
 (a assinatura é conferida localmente contra o C14N real, mas só a Receita valida de fato). A chave `KEY_PEM` precisa estar em

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
 import { createVerify, createHash, X509Certificate } from 'node:crypto';
 import { writeFileSync, readFileSync } from 'node:fs';
-import { eventoCienciaAssinado, envelopeEvento, lerRetEvento } from './fiscal.ts';
+import { eventoCienciaAssinado, eventoManifestacao, envelopeEvento, lerRetEvento } from './fiscal.ts';
 
 const d = execSync('mktemp -d').toString().trim();
 execSync(`openssl req -x509 -newkey rsa:2048 -nodes -keyout ${d}/k.pem -out ${d}/c.pem -days 2 -subj "/CN=teste" 2>/dev/null`);
@@ -31,4 +31,14 @@ assert.match(envelopeEvento(r.evento, '1'), /<idLote>1<\/idLote><evento/);
 const ret = (cs) => `<retEnvEvento><idLote>1</idLote><cStat>128</cStat><xMotivo>Lote processado</xMotivo><retEvento><infEvento><cStat>${cs}</cStat><xMotivo>x</xMotivo></infEvento></retEvento></retEnvEvento>`;
 assert.equal(lerRetEvento(ret('135')).ok, true); assert.equal(lerRetEvento(ret('573')).ok, true); assert.equal(lerRetEvento(ret('491')).ok, false);
 await assert.rejects(eventoCienciaAssinado({ cnpj: '1', chave, ambiente: 'producao', certPem, keyPem: '-----BEGIN RSA PRIVATE KEY-----\nAA\n-----END RSA PRIVATE KEY-----' }));
+// outras manifestações
+const base = { cnpj: '12345678000195', chave, ambiente: 'producao', certPem, keyPem };
+const conf = await eventoManifestacao({ ...base, tipo: 'confirmacao' });
+assert.match(conf.evento, /Id="ID210200\d{44}01"/); assert.match(conf.evento, /<tpEvento>210200<\/tpEvento>/);
+assert.equal((await eventoManifestacao({ ...base, tipo: 'desconhecimento' })).evento.includes('210220'), true);
+await assert.rejects(eventoManifestacao({ ...base, tipo: 'nao_realizada', justificativa: 'curto' }));
+const nr = await eventoManifestacao({ ...base, tipo: 'nao_realizada', justificativa: 'Mercadoria devolvida <ao> transportador & recusada' });
+assert.match(nr.evento, /<xJust>Mercadoria devolvida &lt;ao&gt; transportador &amp; recusada<\/xJust>/);
+assert.equal(createHash('sha1').update(nr.infCanon).digest('base64'), nr.digest);
+await assert.rejects(eventoManifestacao({ ...base, tipo: 'xyz' }));
 console.log('ciencia: ok');

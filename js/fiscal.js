@@ -19,6 +19,7 @@ function fiscalCard(){
         '<span id="fiscSt"></span></div>'+
       '<div class="toolbar" style="margin:0"><button class="btn" id="fiscGo">Buscar notas agora</button>'+
       '<button class="btn sec" id="fiscPend">Ver notas encontradas</button></div>'+
+      '<div id="fiscAuto" class="note" style="margin-top:10px"></div>'+
       '<div class="note">Traz as notas em que o CNPJ aparece (compras e, quando a Receita informar, vendas) e as NFS-e. '+
       'Nada entra no estoque ou no financeiro sem você conferir.</div>'
       :'<div class="empty">Cadastre a empresa com um CNPJ válido (Cadastros → Empresas) para buscar as notas.</div>')
@@ -37,6 +38,41 @@ async function fiscalWire(){
     const {count}=await SB.from('fiscal_docs').select('nsu',{count:'exact',head:true}).eq('org_id',ORG).eq('processado',false);
     if(st&&document.body.contains(st))st.innerHTML=(ult?' · última consulta '+esc(new Date(ult).toLocaleString('pt-BR')):' · ainda não consultado')+
       (count?' · <b>'+count+' documento(s) esperando conferência</b>':'');
+  }catch(e){}
+  fiscalAutoDesenhar();
+}
+
+/* ---------- busca automática diária (o agendamento em si é o pg_cron do FISCAL.md) ---------- */
+async function fiscalAutoDesenhar(){
+  const el=document.getElementById('fiscAuto'),emp=fiscalEmpresa();if(!el||!emp)return;
+  const {data}=await SB.from('fiscal_config').select('ativo').eq('org_id',ORG).eq('cnpj',soDig(emp.cnpj)).maybeSingle();
+  if(!document.body.contains(el))return;
+  const ativa=!!(data&&data.ativo);
+  el.innerHTML='Busca automática diária: <b>'+(ativa?'ligada':'desligada')+'</b>'+
+    (ehAdmin()?' <button class="btn sec sm" id="fiscAutoBt">'+(ativa?'Desligar':'Ligar')+'</button>':' (só o administrador altera)')+
+    '<br>Depois de ligar, o agendamento precisa estar criado no Supabase (passo 7 do FISCAL.md).';
+  const bt=document.getElementById('fiscAutoBt');
+  if(bt)bt.onclick=async()=>{
+    const uf=UF_COD[emp.uf];if(!uf){toast('Informe a UF da empresa no cadastro');return}
+    const {error}=await SB.from('fiscal_config').upsert({org_id:ORG,cnpj:soDig(emp.cnpj),uf_codigo:String(uf),ambiente:fiscalAmbiente(),ativo:!ativa});
+    if(error){toast('Não foi possível salvar: '+error.message);return}
+    toast(ativa?'Busca automática desligada':'Busca automática ligada');fiscalAutoDesenhar();
+  };
+}
+
+/* ---------- pendências: selo no menu e aviso no Painel ---------- */
+const FISCAL_N={n:0,velhas:0};let fiscalContT=0;
+const FISCAL_DIAS_ALERTA=3;
+async function fiscalContagem(forcar){
+  if(MODE!=='supabase'||!SB||!ORG)return;
+  if(!forcar&&Date.now()-fiscalContT<60000)return;
+  fiscalContT=Date.now();
+  try{
+    const base=()=>SB.from('fiscal_docs').select('nsu',{count:'exact',head:true}).eq('org_id',ORG).eq('processado',false);
+    const lim=new Date(Date.now()-FISCAL_DIAS_ALERTA*864e5).toISOString();
+    const [a,b]=await Promise.all([base(),base().lt('recebido_em',lim)]);
+    const n=a.count||0,v=b.count||0;
+    if(n!==FISCAL_N.n||v!==FISCAL_N.velhas){FISCAL_N.n=n;FISCAL_N.velhas=v;if(!ovl.classList.contains('on'))render()}
   }catch(e){}
 }
 
@@ -123,6 +159,7 @@ async function fiscalBaixar(chaves){
       if(error)toast('Falha ao marcar como conferido: '+error.message);
     }
   }
+  fiscalContagem(true);
 }
 
 async function fiscalMostrar(){
@@ -208,4 +245,37 @@ async function fiscalCiencia(resumos){
   toast(feitas.length+' ciência(s) registrada(s)'+(falhas.length?' · '+falhas.length+' falhou: '+((r[falhas[0].chave]||{}).msg||'erro'):'')+
     (feitas.length?' · busque de novo para receber o XML':''));
   render();
+}
+
+/* ---------- manifestação do destinatário (confirmar, desconhecer, não realizada) ---------- */
+const MANIF={confirmacao:'Confirmação da operação',desconhecimento:'Desconhecimento da operação',nao_realizada:'Operação não realizada'};
+const MANIF_AJUDA={confirmacao:'Você confirma que recebeu a mercadoria e que a operação aconteceu.',
+  desconhecimento:'Você não reconhece esta compra (por exemplo, nota emitida em seu nome por engano).',
+  nao_realizada:'A operação foi feita na nota, mas a mercadoria não chegou ou foi recusada. Exige justificativa.'};
+const fiscalManifestavel=r=>MODE==='supabase'&&r.modelo!=='NFS-e'&&r.direcao!=='Emitida'&&String(r.chave||'').replace(/\D/g,'').length===44;
+function fiscalColManifestacao(r){
+  if(r.manifestacao)return '<span class="bg g-green">'+esc(MANIF[r.manifestacao]||r.manifestacao)+'</span>';
+  return fiscalManifestavel(r)?'<button class="btn sec sm" data-mf="'+r.id+'">Manifestar</button>':'<span class="bg g-gray">—</span>';
+}
+function fiscalWireLista(el){el.querySelectorAll('[data-mf]').forEach(b=>b.onclick=()=>fiscalManifestar(b.dataset.mf))}
+function fiscalManifestar(id){
+  const nf=byId('nfe',id),emp=fiscalEmpresa();if(!nf||!emp)return;
+  const f=[{k:'tipo',l:'Manifestação',t:'select',opts:Object.keys(MANIF).map(k=>({v:k,l:MANIF[k]})),req:1},
+    {k:'justificativa',l:'Justificativa (obrigatória em “não realizada”, 15 a 255 caracteres)',t:'textarea'}];
+  openM('Manifestar a nota '+String(nf.chave).slice(-8),formHtml(f,{tipo:'confirmacao'})+
+    '<div class="note" id="mfAj">'+esc(MANIF_AJUDA.confirmacao)+'</div>'+
+    '<div class="note" style="color:var(--amber)">A manifestação é registrada na Receita e não pode ser desfeita.</div>','Enviar à Receita',async d=>{
+    if(d.tipo==='nao_realizada'&&String(d.justificativa||'').trim().length<15){toast('Escreva a justificativa (mínimo 15 caracteres)');return}
+    const b=document.getElementById('mSave');b.disabled=true;b.textContent='Enviando…';
+    const {data,error}=await SB.functions.invoke('buscar-notas',{body:{acao:'manifestar',tipo:d.tipo,justificativa:d.justificativa,
+      org_id:ORG,cnpj:soDig(nf.dest_cnpj||emp.cnpj),ambiente:fiscalAmbiente(),chaves:[nf.chave]}});
+    b.disabled=false;b.textContent='Enviar à Receita';
+    if(error){let m=error.message||'erro';try{const j=await error.context.json();if(j&&j.erro)m=j.erro}catch(e){}toast('Não foi possível enviar: '+m);return}
+    const r=(data.ciencia||{})[soDig(nf.chave)]||{};
+    if(!r.ok){toast('A Receita não aceitou: '+(r.msg||'erro')+(r.cStat?' ('+r.cStat+')':''));return}
+    nf.manifestacao=d.tipo;nf.manifestado_em=hoje();put('nfe',nf);
+    closeM();toast(MANIF[d.tipo]+' registrada');render();
+  });
+  const sel=document.getElementById('f_tipo');
+  if(sel)sel.onchange=()=>{document.getElementById('mfAj').textContent=MANIF_AJUDA[sel.value]||''};
 }

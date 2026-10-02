@@ -2,7 +2,7 @@
 // com o certificado A1 da empresa e guarda os XMLs em public.fiscal_docs.
 // Passo a passo de implantação: FISCAL.md.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { envelopeDistDFe, envelopeEvento, ESPERA_MS, eventoCienciaAssinado, lerRetDistDFe, lerRetEvento, lerRetNFSe, nsu15, soDigitos, URL_DISTDFE, URL_EVENTO, URL_NFSE, type Doc } from './fiscal.ts';
+import { envelopeDistDFe, envelopeEvento, ESPERA_MS, eventoManifestacao, lerRetDistDFe, lerRetEvento, lerRetNFSe, nsu15, soDigitos, URL_DISTDFE, URL_EVENTO, URL_NFSE, type Doc } from './fiscal.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -14,35 +14,63 @@ const MAX_LOTES = 10; // 50 documentos por lote na SEFAZ
 
 type Resultado = { novos: number; status: string; msg: string; aguardar_ate?: string };
 
+function abrirCliente() {
+  // certificado A1 em PEM (secrets da função) — nunca vai para o navegador
+  const cert = Deno.env.get('CERT_PEM'), key = Deno.env.get('KEY_PEM'), ca = Deno.env.get('SEFAZ_CA_PEM');
+  if (!cert || !key) return null;
+  // deno-lint-ignore no-explicit-any
+  const client = (Deno as any).createHttpClient({ cert, key, ...(ca ? { caCerts: [ca] } : {}) });
+  return { cert, key, client };
+}
+const SEM_CERT = 'Certificado não configurado (secrets CERT_PEM e KEY_PEM). Veja FISCAL.md.';
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   try {
-    const { org_id, cnpj: cnpjRaw, servicos = ['nfe', 'nfse'], ambiente = 'producao', uf_codigo = '', acao = 'buscar', chaves = [] } = await req.json();
+    const url = Deno.env.get('SUPABASE_URL')!;
+    const db = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    const corpo = await req.json();
+
+    // Execução agendada (pg_cron): autenticada por segredo próprio; consulta tudo que estiver ativo em fiscal_config
+    if (corpo.acao === 'agendada') {
+      const segredo = Deno.env.get('CRON_SECRET');
+      if (!segredo || req.headers.get('x-cron-secret') !== segredo) return json({ erro: 'Não autorizado.' }, 401);
+      const c = abrirCliente();
+      if (!c) return json({ erro: SEM_CERT }, 412);
+      const { data: cfgs } = await db.from('fiscal_config').select('*').eq('ativo', true);
+      const resumo: Record<string, unknown> = {};
+      for (const cfg of cfgs ?? []) {
+        for (const servico of ['nfe', 'nfse'] as const) {
+          try {
+            resumo[cfg.cnpj + ':' + servico] = await consultar(db, c.client, { org_id: cfg.org_id, cnpj: cfg.cnpj, servico, ambiente: cfg.ambiente, uf_codigo: cfg.uf_codigo });
+          } catch (e) { resumo[cfg.cnpj + ':' + servico] = { erro: (e as Error).message } }
+        }
+      }
+      return json(resumo);
+    }
+
+    const { org_id, cnpj: cnpjRaw, servicos = ['nfe', 'nfse'], ambiente = 'producao', uf_codigo = '', acao = 'buscar', chaves = [], tipo = 'ciencia', justificativa = '' } = corpo;
     const cnpj = soDigitos(cnpjRaw);
     if (!org_id || cnpj.length !== 14) return json({ erro: 'Informe org_id e um CNPJ de 14 dígitos.' }, 400);
 
-    // 1) quem chamou precisa estar logado e ser membro da empresa
-    const url = Deno.env.get('SUPABASE_URL')!;
+    // quem chamou precisa estar logado e ser membro da empresa
     const doUsuario = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, {
       global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
     });
     const { data: ehMembro, error: eAuth } = await doUsuario.rpc('eh_membro', { p_org: org_id });
     if (eAuth || !ehMembro) return json({ erro: 'Sem acesso a esta empresa.' }, 403);
-    const db = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    const c = abrirCliente();
+    if (!c) return json({ erro: SEM_CERT }, 412);
+    const { cert, key, client } = c;
 
-    // 2) certificado A1 em PEM (secrets da função) — nunca vai para o navegador
-    const cert = Deno.env.get('CERT_PEM'), key = Deno.env.get('KEY_PEM'), ca = Deno.env.get('SEFAZ_CA_PEM');
-    if (!cert || !key) return json({ erro: 'Certificado não configurado (secrets CERT_PEM e KEY_PEM). Veja FISCAL.md.' }, 412);
-    // deno-lint-ignore no-explicit-any
-    const client = (Deno as any).createHttpClient({ cert, key, ...(ca ? { caCerts: [ca] } : {}) });
-
-    if (acao === 'ciencia') {
-      const lista = (chaves as string[]).map(soDigitos).filter((c) => c.length === 44).slice(0, 20);
+    if (acao === 'ciencia' || acao === 'manifestar') {
+      const tp = acao === 'ciencia' ? 'ciencia' : tipo;
+      const lista = (chaves as string[]).map(soDigitos).filter((x) => x.length === 44).slice(0, 20);
       if (!lista.length) return json({ erro: 'Nenhuma chave de 44 dígitos informada.' }, 400);
       const resultados: Record<string, { ok: boolean; cStat: string; msg: string }> = {};
       for (const chave of lista) { // um evento por pedido: o erro de uma nota não derruba as outras
         try {
-          const ev = await eventoCienciaAssinado({ cnpj, chave, ambiente, certPem: cert, keyPem: key });
+          const ev = await eventoManifestacao({ cnpj, chave, ambiente, certPem: cert, keyPem: key, tipo: tp, justificativa });
           const r = await fetch(URL_EVENTO[ambiente === 'homologacao' ? 'homologacao' : 'producao'], {
             method: 'POST', client,
             headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento"' },

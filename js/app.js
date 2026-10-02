@@ -612,6 +612,7 @@ function navBadge(k){
   if(k==='financeiro')return contasVencidas().length||0;
   if(k==='os')return U('os').filter(o=>o.status==='Agendada'&&o.data<hoje()).length||0;
   if(k==='estoque')return alertasEstoque().length||0;
+  if(k==='compras'&&typeof FISCAL_N!=='undefined')return FISCAL_N.n||0;
   if(k==='cadastros')return docsAlerta().filter(x=>diasAte(x.doc.validade)<0).length||0;
   return 0;
 }
@@ -633,6 +634,7 @@ function render(){
   if(typeof aplicarModoCelular==='function')aplicarModoCelular();
   drawUnid();
   drawNav();
+  if(typeof fiscalContagem==='function')fiscalContagem();
   const tit=(NAV.flatMap(g=>g.i).find(i=>i[0]===route)||[,'Painel'])[1];
   document.getElementById('ttl').innerHTML='<span class="ti">'+ic(NAV_IC[route]||'dashboard',19)+'</span>'+esc(tit);
   document.getElementById('sub').textContent=(SUB[route]||'')+(UNID&&['painel','vendas','orcamentos','obras','os','contratos','estoque','compras','financeiro','bancos','conciliacao','fluxo','dre','dre_contabil','marketing'].includes(route)?' · '+nomeUnid(UNID):'');
@@ -780,6 +782,8 @@ R.painel=v=>{
   const mesA=mesDe(hoje()),aGerar=U('contratos').filter(c=>c.status==='Ativo'&&ctrVenceNoMes(c,mesA)&&!S.financeiro.some(l=>l.contrato===c.id&&mesDe(l.vencimento)===mesA));
   if(aGerar.length)ah+='<div style="margin-bottom:9px"><span class="bg g-amber">'+aGerar.length+'</span> contrato(s) sem lançamento neste mês ('+
       aGerar.filter(ehCtrManut).length+' de manutenção, '+aGerar.filter(ehCtrForn).length+' de fornecedor)</div>';
+  if(typeof FISCAL_N!=='undefined'&&FISCAL_N.n)ah+='<div style="margin-bottom:9px"><span class="bg '+(FISCAL_N.velhas?'g-red':'g-amber')+'">'+FISCAL_N.n+'</span> nota(s) fiscal(is) da Receita esperando conferência'+
+    (FISCAL_N.velhas?' ('+FISCAL_N.velhas+' há mais de '+FISCAL_DIAS_ALERTA+' dias)':'')+' <button class="btn sec sm" onclick="go(\'compras\')">Conferir</button></div>';
   const adp=S.aditivos.filter(a=>a.status==='Pendente');
   if(adp.length)ah+='<div style="margin-bottom:9px"><span class="bg g-amber">'+adp.length+'</span> aditivo(s) aguardando aprovação</div>';
   const prontas=U('obras').filter(o=>o.status==='Em execução'&&(o.etapas||[]).length&&(o.etapas||[]).every(e=>e.status==='Concluída'));
@@ -1977,11 +1981,13 @@ R.compras=v=>{
   const ln=document.getElementById('lnf');
   ln.innerHTML=tbl([{l:'Emissão',f:r=>dBR(r.emissao)},{l:'Nota',f:r=>'<span class="bg '+(r.direcao==='Emitida'?'g-accent':'g-gray')+'">'+esc((r.modelo||'NF-e')+' '+(r.direcao||'recebida').toLowerCase())+'</span>'},
     {l:'Fornecedor / cliente',s:1,f:r=>esc(r.contraparte||r.fornecedor_nome||'—')},
+    {l:'Manifestação',f:r=>window.fiscalColManifestacao?fiscalColManifestacao(r):''},
     {l:'Vínculo',f:r=>r.receber&&byId('financeiro',r.receber)?'<span class="bg g-green">conta a receber</span>':r.pedido&&byId('compras',r.pedido)?'<span class="bg g-green">pedido de compra</span>':r.direcao==='Emitida'?'<span class="bg g-amber">sem conta a receber</span>':'<span class="bg g-gray">—</span>'},
     {l:'Chave',f:r=>'<span style="font-size:11px">'+esc(String(r.chave||'').slice(0,12))+'…</span>'},
     {l:'Itens',n:1,f:r=>(r.itens||[]).length},{l:'Valor',n:1,f:r=>money(r.valor)},
     {l:'Projeto',f:r=>r.obra?esc(nm('obras',r.obra,'codigo')):'<span class="bg g-gray">estoque geral</span>'}],
     U('nfe'),{empty:'Nenhum XML importado ainda.'});
+  if(window.fiscalWireLista)fiscalWireLista(ln);
   const el=document.getElementById('lst');
   el.innerHTML=tbl([{l:'Emissão',f:r=>dBR(r.emissao)},{l:'Fornecedor',s:1,f:r=>esc(nm('fornecedores',r.fornecedor))},
     {l:'Projeto',f:r=>r.obra?esc(nm('obras',r.obra,'codigo')):'—'},{l:'Itens',k:'descricao'},

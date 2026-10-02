@@ -206,3 +206,23 @@ create policy fiscal_docs_baixar on public.fiscal_docs for update to authenticat
 grant select on public.fiscal_cursor to authenticated;
 grant select on public.fiscal_docs to authenticated;
 grant update (processado) on public.fiscal_docs to authenticated;
+
+-- Busca automática diária: quais CNPJs a função agendada consulta (só o administrador liga/desliga)
+create table if not exists public.fiscal_config (
+  org_id      uuid not null references public.organizacoes(id) on delete cascade,
+  cnpj        text not null,
+  uf_codigo   text not null,
+  ambiente    text not null default 'producao' check (ambiente in ('producao','homologacao')),
+  ativo       boolean not null default true,
+  primary key (org_id, cnpj)
+);
+alter table public.fiscal_config enable row level security;
+drop policy if exists fiscal_config_ler on public.fiscal_config;
+create policy fiscal_config_ler on public.fiscal_config for select to authenticated using (public.eh_membro(org_id));
+drop policy if exists fiscal_config_inc on public.fiscal_config;
+create policy fiscal_config_inc on public.fiscal_config for insert to authenticated with check (public.eh_admin(org_id));
+drop policy if exists fiscal_config_alt on public.fiscal_config;
+create policy fiscal_config_alt on public.fiscal_config for update to authenticated using (public.eh_admin(org_id)) with check (public.eh_admin(org_id));
+drop policy if exists fiscal_config_exc on public.fiscal_config;
+create policy fiscal_config_exc on public.fiscal_config for delete to authenticated using (public.eh_admin(org_id));
+grant select, insert, update, delete on public.fiscal_config to authenticated;
