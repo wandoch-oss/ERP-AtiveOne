@@ -1,7 +1,7 @@
 /* ---------- estado e persistência ---------- */
 const COLS=['clientes','oportunidades','orcamentos','obras','os','agenda','contratos','apontamentos',
 'produtos','servicos','categorias_servico','locais','estoque','compras','fornecedores','financeiro','nfe','campanhas',
-'concorrentes','contas_bancarias','extrato','colaboradores','parceiros','plano_contas','plano_gerencial','ajustes','reservas','aditivos','familias','categorias','vendas','canais','empresas','centros_lucro','centros_custo'];
+'concorrentes','contas_bancarias','extrato','colaboradores','parceiros','plano_contas','plano_gerencial','ajustes','reservas','aditivos','familias','categorias','vendas','canais','empresas','centros_lucro','centros_custo','usuarios'];
 const S={}; COLS.forEach(c=>S[c]=[]);
 let DB=null, DL=null, FB=null, ASSETS=null, MODE='local', pend={};
 
@@ -47,7 +47,7 @@ function empDe(col,r){
   return empresaPadrao();
 }
 const naUnid=(col,r)=>!UNID||empDe(col,r)===UNID;
-const U=col=>UNID?S[col].filter(r=>naUnid(col,r)):S[col];
+const U=col=>{const r=UNID?S[col].filter(x=>naUnid(col,x)):S[col];return col==='os'&&typeof soMinhasOS==='function'?soMinhasOS(r):r};
 const multiUnid=()=>S.empresas.filter(e=>ativo(e)).length>1;
 const nomeUnid=id=>{const e=byId('empresas',id);return e?(e.nome_fantasia||e.razao_social):'—'};
 const campoUnid={k:'empresa',l:'Unidade',t:'ref',col:'empresas',filtro:r=>ativo(r),rotulo:r=>(r.nome_fantasia||r.razao_social)+' · '+r.tipo};
@@ -558,7 +558,7 @@ const NAV=[
  {g:'Compras',i:[['compras','Pedido de Compra','⇄'],['estoque','Estoque','▣']]},
  {g:'Financeiro',i:[['financeiro','Pagar e receber','$'],['bancos','Contas bancárias','▭'],['conciliacao','Conciliação','⇋'],['fluxo','Fluxo de caixa','≈'],['dre','DRE gerencial','◱'],['dre_contabil','DRE contábil','◲']]},
  {g:'Gestão',i:[['contratos','Contratos','⎘']]},
- {g:'Sistema',i:[['cadastros','Cadastros','⚙']]}
+ {g:'Sistema',i:[['cadastros','Cadastros','⚙'],['acessos','Acessos','⚿']]}
 ];
 const SUB={painel:'Visão geral da operação',clientes:'Base, histórico e rentabilidade',
  oportunidades:'Funil comercial por estágio',orcamentos:'Orçamentos híbridos: material + serviço',
@@ -570,15 +570,16 @@ const SUB={painel:'Visão geral da operação',clientes:'Base, histórico e rent
  compras:'Pedidos, fornecedores e importação de XML',financeiro:'Contas a pagar e a receber',
  bancos:'Contas bancárias e saldos',conciliacao:'Importação de extratos e conciliação bancária',
  dre_contabil:'Resultado contábil a partir do plano gerencial vinculado',fluxo:'Projeção unificada de entradas e saídas',dre:'Resultado gerencial por vertical',
- cadastros:'Empresas, financeiro, produtos, serviços, pessoas e compras'};
+ cadastros:'Empresas, financeiro, produtos, serviços, pessoas e compras',acessos:'Perfis e usuários do sistema'};
 let route='painel';
 function go(k){route=k;if(k==='cadastros')cadTab='empresas';document.getElementById('side').classList.remove('open');render();window.scrollTo(0,0)}
 function drawNav(){
   const el=document.getElementById('side');
   let h='<div class="brand" title="Ative Hub"><img src="assets/logo-app.png" alt="Ative Hub"><span class="brand-one">HUB</span></div>';
   NAV.forEach(g=>{
+    const its=g.i.filter(it=>typeof podeRota!=='function'||podeRota(it[0]));if(!its.length)return;
     if(g.g)h+='<div class="ng">'+g.g+'</div>';
-    g.i.forEach(it=>{
+    its.forEach(it=>{
       const alert=navBadge(it[0]);
       h+='<button class="nav'+(route===it[0]?' on':'')+'" data-go="'+it[0]+'"><span class="ni">'+ic(NAV_IC[it[0]]||'dashboard',17)+'</span><span class="nt">'+it[1]+'</span>'+(alert?'<b>'+alert+'</b>':'')+'</button>';
     });
@@ -608,6 +609,8 @@ function drawUnid(){
   el.onchange=()=>{UNID=el.value;try{localStorage.setItem('ative:unid',UNID)}catch(e){}render()};
 }
 function render(){
+  if(typeof podeRota==='function'&&!podeRota(route))route=rotaInicial();
+  if(typeof faixaPerfil==='function')faixaPerfil();
   if(typeof aplicarModoCelular==='function')aplicarModoCelular();
   drawUnid();
   drawNav();
@@ -1593,13 +1596,13 @@ function htmlResultado(o){
 
 /* ---------- ordens de serviço ---------- */
 R.os=v=>{
-  v.innerHTML='<div class="toolbar"><button class="btn" id="nv">+ Nova OS</button>'+
+  v.innerHTML='<div class="toolbar">'+(typeof perfilAtual==='function'&&perfilAtual()==='Técnico'?'':'<button class="btn" id="nv">+ Nova OS</button>')+
     '<select id="ft"><option value="">Todos os tipos</option>'+
     ['Instalação','Manutenção preventiva','Corretiva','Garantia','Visita técnica','Treinamento'].map(x=>'<option>'+x+'</option>').join('')+
     '</select><select id="fs"><option value="">Todos os status</option>'+
     ['Agendada','Em execução','Concluída','Cancelada'].map(x=>'<option>'+x+'</option>').join('')+'</select></div>'+
     '<div class="card"><div class="cbody" id="lst"></div></div>';
-  document.getElementById('nv').onclick=()=>editRec('os',null);
+  const nvOS=document.getElementById('nv');if(nvOS)nvOS.onclick=()=>editRec('os',null);
   const draw=()=>{
     const ft=document.getElementById('ft').value,fs=document.getElementById('fs').value;
     const rows=U('os').filter(o=>(!ft||o.tipo===ft)&&(!fs||o.status===fs))
@@ -2945,12 +2948,11 @@ R.cadastros=v=>{
     '<div class="card"><div class="chead"><h2>Dados</h2></div><div class="cbody">'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sec sm" id="demo">Carregar dados de exemplo</button>'+
     '<button class="btn sec sm" id="exp">Exportar backup</button><button class="btn sec sm" id="imp">Importar backup</button>'+
-    (MODE==='supabase'&&ORG_PAPEL==='admin'?'<button class="btn sec sm" id="acesso">Dar acesso a um usuário</button>':'')+'<button class="btn dgr sm" id="zap">Apagar tudo</button><input type="file" id="fimp" accept=".json" style="display:none"></div>'+
+    '<button class="btn dgr sm" id="zap">Apagar tudo</button><input type="file" id="fimp" accept=".json" style="display:none"></div>'+
     '<div class="note">Os dados ficam salvos automaticamente. '+(MODE==='supabase'?'Banco: Supabase ('+esc(ORG_NOME||'')+'). ':'Use Exportar e Importar backup para levar os dados daqui para o Supabase. ')+
     '"Apagar tudo" remove todos os registros deste sistema.</div></div></div>';
   v.querySelectorAll('[data-tab],[data-grp]').forEach(b=>b.onclick=()=>{cadTab=b.dataset.tab||b.dataset.grp;render()});
   document.getElementById('nv').onclick=()=>editRec(cadTab,null);
-  const ac=document.getElementById('acesso');if(ac)ac.onclick=()=>sbDarAcesso();
   const pd=document.getElementById('padrao');
   const ip=document.getElementById('impc');if(ip){ip.onclick=()=>document.getElementById('fpc').click();document.getElementById('fpc').onchange=e=>{importarPlanoArquivo(e.target.files,cadTab);e.target.value=''};
     document.getElementById('modc').onclick=()=>baixarArquivo('modelo-'+PLANOS[cadTab].arq+'.csv','\uFEFF'+MODELO_PLANO[cadTab])}

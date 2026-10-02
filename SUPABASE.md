@@ -42,8 +42,18 @@ O arquivo `.nojekyll` já está no projeto.
 
 ## 7. Dar acesso à equipe
 1. Crie o usuário da pessoa no painel (passo 3.3).
-2. No sistema, **Cadastros → Dados → Dar acesso a um usuário**, informe o e-mail e o papel
-   (*Membro* usa o sistema; *Administrador* também libera acessos).
+2. No sistema, **Sistema → Acessos → Novo acesso**: informe nome, e-mail e perfil.
+
+| Perfil | O que acessa |
+|---|---|
+| Administrador | Tudo, inclusive Painel, Cadastros e Acessos |
+| Comercial | Marketing e Comercial |
+| Operação | Projetos, ordens de serviço e agenda |
+| Financeiro | Compras, Financeiro e Contratos |
+| Técnico | Só as ordens de serviço em que ele é o técnico (vincule o técnico no cadastro do acesso) |
+
+Só o administrador altera os acessos (regra no próprio banco). Os perfis controlam as telas
+do sistema; os dados das demais áreas continuam legíveis no banco para qualquer membro da empresa.
 
 ## Custos
 O plano Free serve para testar (o projeto pausa após 1 semana sem uso). Para uso diário,

@@ -13,6 +13,7 @@ const ICONES={
  chart:'<path d="M5 20V11M11 20V4M17 20v-6"/><path d="M3 21h18"/>',
  link:'<circle cx="9" cy="12" r="5"/><circle cx="15" cy="12" r="5"/>',
  eye:'<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+ lock:'<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
  eyeoff:'<path d="M3 3l18 18M10.6 5.2A9.7 9.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.5 6.6C3.7 8.3 2 12 2 12s3.6 7 10 7c1.5 0 2.8-.4 4-.9"/>',
  building:'<path d="M4 21V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16"/><path d="M14 10h5a1 1 0 0 1 1 1v10"/><path d="M8 8h2M8 12h2M8 16h2M3 21h18"/>',
  wrench:'<path d="M15 5a4 4 0 0 0-4.6 5.4L3.5 17.3a1.8 1.8 0 0 0 2.5 2.5l6.9-6.9A4 4 0 0 0 18.3 8.5l-2.4 2.4-2.3-.5-.5-2.3z"/>',
@@ -52,7 +53,7 @@ function ic(nome,tam){
   tam=tam||16;
   return '<svg class="ico" viewBox="0 0 24 24" width="'+tam+'" height="'+tam+'" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+d+'</svg>';
 }
-const NAV_IC={painel:'dashboard',clientes:'users',oportunidades:'funnel',orcamentos:'filetext',vendas:'checkc',marketing:'chart',campanhas:'megaphone',
+const NAV_IC={painel:'dashboard',acessos:'lock',clientes:'users',oportunidades:'funnel',orcamentos:'filetext',vendas:'checkc',marketing:'chart',campanhas:'megaphone',
   canais:'share',parcerias:'link',concorrentes:'eye',obras:'building',os:'wrench',agenda:'calendar',estoque:'box',compras:'cart',financeiro:'dollar',
   bancos:'bank',conciliacao:'swap',fluxo:'trend',dre:'pie',dre_contabil:'pie',contratos:'contract',cadastros:'settings'};
 const TAB_IC={'Empresas':'building','Financeiro':'dollar','Produtos':'box','Serviços':'wrench','Pessoas':'users','Compras':'cart'};

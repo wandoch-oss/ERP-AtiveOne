@@ -391,3 +391,9 @@ body.is-mob .gantt{min-width:640px!important}
 .aq-info small{color:var(--faint);font-size:11.5px}
 .aq-act{display:flex;gap:6px;flex-wrap:wrap;padding:8px 12px 12px;margin-top:auto}
 body.login #mnav,body.login #mfab,body.login #mtop{display:none!important}
+#faixa{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:90;display:flex;align-items:center;gap:10px;background:#141a26;color:#fff;
+  padding:8px 10px 8px 14px;border-radius:99px;box-shadow:0 6px 24px rgba(0,0,0,.25);font-size:13px;max-width:calc(100vw - 32px)}
+#faixa .btn{white-space:nowrap}
+body.is-mob #faixa{bottom:84px}
+#faixa span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#faixa svg{flex-shrink:0}

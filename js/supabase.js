@@ -182,16 +182,3 @@ async function sbAssinarUrls(){
       (data||[]).forEach(x=>{if(x&&x.signedUrl)SB_URLS[x.path]=x.signedUrl})}catch(e){}
   }
 }
-
-/* acesso de outras pessoas: o administrador libera usuários já criados no Supabase */
-function sbDarAcesso(){
-  if(ORG_PAPEL!=='admin'){toast('Só o administrador da empresa pode liberar acesso.');return}
-  openM('Dar acesso ao sistema',
-    '<div class="note" style="margin:0 0 10px">Crie o usuário antes no painel do Supabase (Authentication → Users → Add user), com e-mail e senha. Depois informe o e-mail aqui para ligar a pessoa a '+esc(ORG_NOME||'esta empresa')+'.</div>'+
-    field({k:'email',l:'E-mail do usuário',req:1},'')+field({k:'papel',l:'Papel',t:'select',opts:[{v:'membro',l:'Membro (usa o sistema)'},{v:'admin',l:'Administrador (também libera acessos)'}],req:1},'membro'),
-    'Dar acesso',async d=>{
-      const {error}=await SB.rpc('adicionar_membro',{p_org:ORG,p_email:d.email,p_papel:d.papel});
-      if(error){toast(error.message);return}
-      closeM();toast('Acesso liberado para '+d.email);
-    });
-}

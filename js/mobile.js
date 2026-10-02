@@ -6,8 +6,11 @@ const isMobile=()=>modoDisp==='mobile'||(modoDisp==='auto'&&MQ_CEL.matches);
 if(MQ_CEL.addEventListener)MQ_CEL.addEventListener('change',()=>{if(modoDisp==='auto')render()});
 function setDevice(m){modoDisp=m;try{localStorage.setItem('ao-disp',m)}catch(e){}window.scrollTo(0,0);fecharSheet();render()}
 
-const ACOES_RAPIDAS=[['users','Novo cliente',()=>editRec('clientes',null)],['funnel','Nova oportunidade',()=>editRec('oportunidades',null)],['filetext','Novo orçamento',()=>novoOrc()],
-  ['wrench','Nova OS',()=>editRec('os',null)],['dollar','Novo lançamento',()=>editRec('financeiro',null)],['calendar','Compromisso',()=>editRec('agenda',null)]];
+const ACOES_RAPIDAS=[['users','Novo cliente',()=>editRec('clientes',null),'clientes'],['funnel','Nova oportunidade',()=>editRec('oportunidades',null),'oportunidades'],['filetext','Novo orçamento',()=>novoOrc(),'orcamentos'],
+  ['wrench','Nova OS',()=>editRec('os',null),'os'],['dollar','Novo lançamento',()=>editRec('financeiro',null),'financeiro'],['calendar','Compromisso',()=>editRec('agenda',null),'agenda']];
+const pode=k=>typeof podeRota!=='function'||podeRota(k);
+// o técnico só acompanha as OS dele: não cria OS nova
+const acaoLiberada=a=>pode(a[3])&&!(a[3]==='os'&&typeof perfilAtual==='function'&&perfilAtual()==='Técnico');
 const GRUPO_COM=['clientes','oportunidades','orcamentos','vendas'],GRUPO_FIN=['financeiro','bancos','conciliacao','fluxo','dre','dre_contabil'];
 const rotRota=k=>((NAV.flatMap(g=>g.i).find(i=>i[0]===k))||[,k])[1];
 
@@ -31,17 +34,17 @@ function montarChromeCelular(){
   });
 }
 function fecharSheet(){const s=document.getElementById('msheet');if(s)s.hidden=true}
-function tiles(rotas){return '<div class="mtiles">'+rotas.map(k=>'<button class="mtile'+(route===k?' on':'')+'" data-go="'+k+'"><span>'+ic(NAV_IC[k]||'dashboard',22)+'</span>'+esc(rotRota(k))+'</button>').join('')+'</div>'}
+function tiles(rotas){return '<div class="mtiles">'+rotas.filter(pode).map(k=>'<button class="mtile'+(route===k?' on':'')+'" data-go="'+k+'"><span>'+ic(NAV_IC[k]||'dashboard',22)+'</span>'+esc(rotRota(k))+'</button>').join('')+'</div>'}
 function abrirSheet(tipo){
   const s=document.getElementById('msheet'),T=document.getElementById('mshT'),B=document.getElementById('mshB');
   let h='',t='';
   if(tipo==='com'){t='Comercial';h=tiles(GRUPO_COM)}
   else if(tipo==='fin'){t='Financeiro';h=tiles(GRUPO_FIN)}
-  else if(tipo==='fab'){t='Criar novo';h='<div class="mtiles">'+ACOES_RAPIDAS.map((a,i)=>'<button class="mtile" data-fab="'+i+'"><span class="acc">'+ic(a[0],22)+'</span>'+a[1]+'</button>').join('')+'</div>'}
+  else if(tipo==='fab'){t='Criar novo';h='<div class="mtiles">'+ACOES_RAPIDAS.map((a,i)=>!acaoLiberada(a)?'':'<button class="mtile" data-fab="'+i+'"><span class="acc">'+ic(a[0],22)+'</span>'+a[1]+'</button>').join('')+'</div>'}
   else{
     t='Menu';
     // o que já tem atalho na barra inferior (Painel, Comercial, Projetos, Financeiro) não se repete aqui
-    h=NAV.filter(g=>g.g&&!['Comercial','Financeiro'].includes(g.g)).map(g=>({g:g.g,r:g.i.map(i=>i[0]).filter(k=>k!=='obras')})).filter(g=>g.r.length)
+    h=NAV.filter(g=>g.g&&!['Comercial','Financeiro'].includes(g.g)).map(g=>({g:g.g,r:g.i.map(i=>i[0]).filter(k=>k!=='obras'&&pode(k))})).filter(g=>g.r.length)
       .map(g=>'<div class="mgl">'+esc(g.g)+'</div>'+tiles(g.r)).join('');
     if(S.empresas.filter(e=>ativo(e)).length>1){
       h+='<div class="mgl">Unidade</div><select id="mUnid"><option value="">Todas as unidades</option>'+S.empresas.filter(e=>ativo(e)).map(e=>'<option value="'+e.id+'"'+(UNID===e.id?' selected':'')+'>'+esc(e.nome_fantasia||e.razao_social)+'</option>').join('')+'</select>';
@@ -65,7 +68,9 @@ function desenharCelular(){
   const un=UNID?nomeUnid(UNID):'';
   document.getElementById('msub').textContent=un||(SUB[route]||'');
   const ativoTab=route==='painel'?'painel':route==='obras'?'obras':GRUPO_COM.includes(route)?'com':GRUPO_FIN.includes(route)?'fin':'menu';
-  document.querySelectorAll('#mnav [data-mt]').forEach(b=>b.classList.toggle('on',b.dataset.mt===ativoTab));
+  const vis={painel:pode('painel'),com:GRUPO_COM.some(pode),obras:pode('obras'),fin:GRUPO_FIN.some(pode),menu:true};
+  document.querySelectorAll('#mnav [data-mt]').forEach(b=>{b.classList.toggle('on',b.dataset.mt===ativoTab);b.style.display=vis[b.dataset.mt]?'':'none'});
+  const fab=document.getElementById('mfab');if(fab)fab.style.display=ACOES_RAPIDAS.some(acaoLiberada)?'':'none';
   fecharSheet();
 }
 

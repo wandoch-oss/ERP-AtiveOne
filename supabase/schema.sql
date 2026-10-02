@@ -86,7 +86,21 @@ begin
     on conflict (org_id, user_id) do update set papel = excluded.papel;
 end $$;
 
+-- O administrador tira o acesso de alguém (não pode tirar o próprio)
+create or replace function public.remover_membro(p_org uuid, p_email text) returns void
+  language plpgsql security definer set search_path = public as $$
+declare v_user uuid;
+begin
+  if not public.eh_admin(p_org) then raise exception 'Só o administrador da empresa pode remover pessoas.'; end if;
+  select id into v_user from auth.users where lower(email) = lower(trim(p_email));
+  if v_user is null then return; end if;
+  if v_user = auth.uid() then raise exception 'Você não pode remover o seu próprio acesso.'; end if;
+  delete from public.membros where org_id = p_org and user_id = v_user;
+end $$;
+
 revoke all on function public.criar_organizacao(text) from public, anon;
+revoke all on function public.remover_membro(uuid, text) from public, anon;
+grant execute on function public.remover_membro(uuid, text) to authenticated;
 revoke all on function public.adicionar_membro(uuid, text, text) from public, anon;
 grant execute on function public.criar_organizacao(text) to authenticated;
 grant execute on function public.adicionar_membro(uuid, text, text) to authenticated;
@@ -110,12 +124,13 @@ create policy membros_remover on public.membros for delete to authenticated usin
 
 drop policy if exists registros_ler on public.registros;
 create policy registros_ler on public.registros for select to authenticated using (public.eh_membro(org_id));
+-- a coleção 'usuarios' (perfis de acesso) só o administrador altera
 drop policy if exists registros_incluir on public.registros;
-create policy registros_incluir on public.registros for insert to authenticated with check (public.eh_membro(org_id));
+create policy registros_incluir on public.registros for insert to authenticated with check (public.eh_membro(org_id) and (colecao <> 'usuarios' or public.eh_admin(org_id)));
 drop policy if exists registros_alterar on public.registros;
-create policy registros_alterar on public.registros for update to authenticated using (public.eh_membro(org_id)) with check (public.eh_membro(org_id));
+create policy registros_alterar on public.registros for update to authenticated using (public.eh_membro(org_id) and (colecao <> 'usuarios' or public.eh_admin(org_id))) with check (public.eh_membro(org_id) and (colecao <> 'usuarios' or public.eh_admin(org_id)));
 drop policy if exists registros_excluir on public.registros;
-create policy registros_excluir on public.registros for delete to authenticated using (public.eh_membro(org_id));
+create policy registros_excluir on public.registros for delete to authenticated using (public.eh_membro(org_id) and (colecao <> 'usuarios' or public.eh_admin(org_id)));
 
 grant select, insert, update, delete on public.registros to authenticated;
 grant select, update on public.organizacoes to authenticated;
