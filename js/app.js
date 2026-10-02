@@ -1962,10 +1962,12 @@ R.compras=v=>{
     '<div class="cbody"><div class="drop" id="drop">Clique aqui ou arraste os arquivos XML de entrada<br>'+
     '<span style="font-size:11px">Lê os itens, dá entrada no estoque, cria a conta a pagar e permite ratear num projeto</span></div>'+
     '<input type="file" id="fx" accept=".xml" multiple style="display:none"></div></div>'+
+    (window.fiscalCard?fiscalCard():'')+
     '<div class="card"><div class="chead"><h2>Notas importadas</h2></div><div class="cbody" id="lnf"></div></div>'+
     '<div class="card"><div class="chead"><h2>Pedidos de compra</h2></div><div class="cbody" id="lst"></div></div>';
   document.getElementById('nv').onclick=()=>editRec('compras',null);
   document.getElementById('nf').onclick=()=>go('cadastros');
+  if(window.fiscalWire)fiscalWire();
   const drop=document.getElementById('drop'),fx=document.getElementById('fx');
   drop.onclick=()=>fx.click();
   drop.ondragover=e=>{e.preventDefault();drop.classList.add('hot')};
@@ -1973,7 +1975,8 @@ R.compras=v=>{
   drop.ondrop=e=>{e.preventDefault();drop.classList.remove('hot');lerXML(e.dataTransfer.files)};
   fx.onchange=()=>lerXML(fx.files);
   const ln=document.getElementById('lnf');
-  ln.innerHTML=tbl([{l:'Emissão',f:r=>dBR(r.emissao)},{l:'Fornecedor',s:1,k:'fornecedor_nome'},
+  ln.innerHTML=tbl([{l:'Emissão',f:r=>dBR(r.emissao)},{l:'Nota',f:r=>'<span class="bg '+(r.direcao==='Emitida'?'g-accent':'g-gray')+'">'+esc((r.modelo||'NF-e')+' '+(r.direcao||'recebida').toLowerCase())+'</span>'},
+    {l:'Fornecedor / cliente',s:1,f:r=>esc(r.contraparte||r.fornecedor_nome||'—')},
     {l:'Chave',f:r=>'<span style="font-size:11px">'+esc(String(r.chave||'').slice(0,12))+'…</span>'},
     {l:'Itens',n:1,f:r=>(r.itens||[]).length},{l:'Valor',n:1,f:r=>money(r.valor)},
     {l:'Projeto',f:r=>r.obra?esc(nm('obras',r.obra,'codigo')):'<span class="bg g-gray">estoque geral</span>'}],
@@ -2009,13 +2012,14 @@ function parseNFe(txt,fname){
   });
   const tot=doc.getElementsByTagName('ICMSTot')[0];
   return{chave:(inf.getAttribute('Id')||fname).replace('NFe',''),
-    fornecedor_nome:q(emit,'xNome')||'Fornecedor não identificado',cnpj:q(emit,'CNPJ'),dest_cnpj:q(dest,'CNPJ'),
+    fornecedor_nome:q(emit,'xNome')||'Fornecedor não identificado',cnpj:q(emit,'CNPJ'),dest_cnpj:q(dest,'CNPJ'),dest_nome:q(dest,'xNome'),dest_doc:q(dest,'CNPJ')||q(dest,'CPF'),
     emissao:String(q(doc.getElementsByTagName('ide')[0],'dhEmi')||q(doc.getElementsByTagName('ide')[0],'dEmi')).slice(0,10)||hoje(),
     valor:Number(q(tot,'vNF')||itens.reduce((a,i)=>a+i.qtd*i.valor,0)),itens:itens};
 }
-function conciliarNFe(notas){
+function conciliarNFe(notas,depois){
   const rep=notas.filter(n=>S.nfe.some(x=>soDig(x.chave)===soDig(n.chave)));
   if(rep.length){toast(rep.length+' nota(s) já importada(s) foram ignoradas');notas=notas.filter(n=>!rep.includes(n))}
+  if(depois&&rep.length)depois(rep);
   if(!notas.length)return;
   const achada=notas.map(n=>S.empresas.find(e=>n.dest_cnpj&&soDig(e.cnpj)===soDig(n.dest_cnpj))).find(Boolean);
   const empSug=(achada&&achada.id)||UNID||empresaPadrao();
@@ -2050,7 +2054,7 @@ function conciliarNFe(notas){
       put('financeiro',{tipo:'Pagar',descricao:'NF-e '+String(n.chave).slice(-8)+' · '+n.fornecedor_nome,
         categoria:'Material',valor:n.valor,vencimento:d.venc,fornecedor:forn.id,obra:d.obra||'',empresa:em,status:'Pendente'});
     });
-    closeM();toast('Importado — estoque e contas atualizados'+(novos?' · '+novos+' produto(s) criados':''));render();
+    closeM();toast('Importado — estoque e contas atualizados'+(novos?' · '+novos+' produto(s) criados':''));if(depois)depois(notas);render();
   },true);
 }
 /* ---------- financeiro ---------- */

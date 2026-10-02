@@ -7,6 +7,7 @@ ERP web sem build para empresas de automação residencial e predial.
 - `js/app.js` — estado, telas e persistência
 - `js/supabase.js` — modo Supabase (login, dados por empresa, tempo real, arquivos)
 - `js/proposta.js`, `js/plano.js`, `js/cronograma.js`, `js/arquivos.js`, `js/mobile.js` — módulos
+- `js/fiscal.js` + `supabase/functions/buscar-notas` — busca de NF-e/NFS-e na Receita (veja `FISCAL.md`)
 - `supabase/schema.sql` — tabelas e regras de acesso do Supabase
 
 ## Onde os dados ficam

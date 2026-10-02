@@ -165,3 +165,44 @@ create policy anexos_alterar on storage.objects for update to authenticated
 drop policy if exists anexos_apagar on storage.objects;
 create policy anexos_apagar on storage.objects for delete to authenticated
   using (bucket_id = 'anexos' and public.eh_membro(((storage.foldername(name))[1])::uuid));
+
+-- ---------------------------------------------------------------------
+-- Notas fiscais buscadas na Receita (Edge Function "buscar-notas", veja FISCAL.md)
+-- A função grava com a chave de serviço; o navegador só lê e marca como processado.
+-- ---------------------------------------------------------------------
+create table if not exists public.fiscal_cursor (
+  org_id            uuid not null references public.organizacoes(id) on delete cascade,
+  cnpj              text not null,
+  servico           text not null check (servico in ('nfe','nfse')),
+  ult_nsu           text not null default '0',
+  max_nsu           text,
+  ultimo_status     text,
+  consultado_em     timestamptz,
+  proxima_consulta  timestamptz,
+  primary key (org_id, cnpj, servico)
+);
+create table if not exists public.fiscal_docs (
+  org_id        uuid not null references public.organizacoes(id) on delete cascade,
+  cnpj          text not null,
+  servico       text not null check (servico in ('nfe','nfse')),
+  nsu           text not null,
+  chave         text,
+  tipo          text,
+  xml           text not null,
+  recebido_em   timestamptz not null default now(),
+  processado    boolean not null default false,
+  primary key (org_id, cnpj, servico, nsu)
+);
+create index if not exists fiscal_docs_pend_idx on public.fiscal_docs(org_id) where not processado;
+
+alter table public.fiscal_cursor enable row level security;
+alter table public.fiscal_docs   enable row level security;
+drop policy if exists fiscal_cursor_ler on public.fiscal_cursor;
+create policy fiscal_cursor_ler on public.fiscal_cursor for select to authenticated using (public.eh_membro(org_id));
+drop policy if exists fiscal_docs_ler on public.fiscal_docs;
+create policy fiscal_docs_ler on public.fiscal_docs for select to authenticated using (public.eh_membro(org_id));
+drop policy if exists fiscal_docs_baixar on public.fiscal_docs;
+create policy fiscal_docs_baixar on public.fiscal_docs for update to authenticated using (public.eh_membro(org_id)) with check (public.eh_membro(org_id));
+grant select on public.fiscal_cursor to authenticated;
+grant select on public.fiscal_docs to authenticated;
+grant update (processado) on public.fiscal_docs to authenticated;
