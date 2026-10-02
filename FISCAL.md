@@ -13,7 +13,7 @@ sem você confirmar.
 ## O que cada tipo de nota faz
 | Nota | Ao importar |
 |---|---|
-| NF-e recebida (CNPJ é o destinatário) | Conferência de sempre: entrada no estoque, conta a pagar, rateio por projeto |
+| NF-e recebida (CNPJ é o destinatário) | Conferência de sempre: entrada no estoque, conta a pagar, rateio por projeto. Se houver pedido de compra em aberto (Enviado/Confirmado) do mesmo fornecedor com o mesmo valor (±1%), ele é indicado e marcado como Recebido |
 | NF-e emitida pela empresa | Só registra na lista de notas |
 | NFS-e recebida | Registra e cria conta a pagar (vencimento em 30 dias) |
 | NFS-e emitida | Só registra |

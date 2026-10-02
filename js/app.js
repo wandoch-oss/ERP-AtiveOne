@@ -2016,11 +2016,20 @@ function parseNFe(txt,fname){
     emissao:String(q(doc.getElementsByTagName('ide')[0],'dhEmi')||q(doc.getElementsByTagName('ide')[0],'dEmi')).slice(0,10)||hoje(),
     valor:Number(q(tot,'vNF')||itens.reduce((a,i)=>a+i.qtd*i.valor,0)),itens:itens};
 }
+// pedido de compra em aberto do mesmo fornecedor com valor igual (tolerância de 1%); o de valor mais próximo vence
+function pedidoDaNota(n){
+  const f=S.fornecedores.find(x=>n.cnpj&&soDig(x.cnpj)===soDig(n.cnpj));if(!f)return null;
+  const tol=Math.max(1,Number(n.valor||0)*0.01);
+  return S.compras.filter(c=>c.fornecedor===f.id&&(c.status==='Enviado'||c.status==='Confirmado')&&Math.abs(Number(c.valor||0)-Number(n.valor||0))<=tol)
+    .sort((a,b)=>Math.abs(a.valor-n.valor)-Math.abs(b.valor-n.valor))[0]||null;
+}
 function conciliarNFe(notas,depois){
   const rep=notas.filter(n=>S.nfe.some(x=>soDig(x.chave)===soDig(n.chave)));
   if(rep.length){toast(rep.length+' nota(s) já importada(s) foram ignoradas');notas=notas.filter(n=>!rep.includes(n))}
   if(depois&&rep.length)depois(rep);
   if(!notas.length)return;
+  const usados=new Set();
+  notas.forEach(n=>{const c=pedidoDaNota(n);n._ped=c&&!usados.has(c.id)?c:null;if(n._ped)usados.add(n._ped.id)});
   const achada=notas.map(n=>S.empresas.find(e=>n.dest_cnpj&&soDig(e.cnpj)===soDig(n.dest_cnpj))).find(Boolean);
   const empSug=(achada&&achada.id)||UNID||empresaPadrao();
   const alm=[almoxDe(empSug)].filter(Boolean);
@@ -2028,7 +2037,8 @@ function conciliarNFe(notas,depois){
     notas.map(n=>'<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:9px">'+
       '<b>'+esc(n.fornecedor_nome)+'</b> · '+dBR(n.emissao)+' · '+money(n.valor)+
       '<div style="font-size:11.5px;color:var(--faint);margin-top:4px">'+
-      n.itens.map(i=>esc(i.nome)+' ('+num(i.qtd,2)+' '+esc(i.un)+')').join(' · ')+'</div></div>').join('')+
+      n.itens.map(i=>esc(i.nome)+' ('+num(i.qtd,2)+' '+esc(i.un)+')').join(' · ')+'</div>'+
+      (n._ped?'<div class="note" style="margin-top:6px;color:var(--green)">Corresponde ao pedido de compra “'+esc(n._ped.descricao)+'” — será marcado como Recebido.</div>':'')+'</div>').join('')+
     (S.empresas.length?field(campoUnid,empSug)+(achada?'<div class="note" style="margin:-4px 0 8px">Unidade identificada pelo CNPJ do destinatário da nota.</div>':
       (notas.some(n=>n.dest_cnpj)?'<div class="note" style="margin:-4px 0 8px;color:var(--amber)">O CNPJ do destinatário não corresponde a nenhuma empresa cadastrada — confira a unidade.</div>':'')):'')+
     field({k:'local',l:'Dar entrada em qual local',t:'ref',col:'locais',filtro:l=>ativo(l)},alm.length?alm[0].id:'')+
@@ -2036,7 +2046,7 @@ function conciliarNFe(notas,depois){
     field({k:'venc',l:'Vencimento da conta a pagar',t:'date'},addDias(hoje(),30));
   openM('Conferir importação',body,'Importar',d=>{
     if(!d.local){toast('Escolha o local de entrada');return}
-    let novos=0;
+    let novos=0,pedidos=0;
     notas.forEach(n=>{
       let forn=S.fornecedores.find(f=>f.cnpj===n.cnpj||f.nome===n.fornecedor_nome);
       if(!forn)forn=put('fornecedores',{nome:n.fornecedor_nome,cnpj:n.cnpj,categoria:'Material'});
@@ -2050,11 +2060,12 @@ function conciliarNFe(notas,depois){
       });
       const em=d.empresa||empDe('locais',byId('locais',d.local));
       put('nfe',{chave:n.chave,fornecedor:forn.id,fornecedor_nome:n.fornecedor_nome,emissao:n.emissao,dest_cnpj:n.dest_cnpj||'',
-        valor:n.valor,itens:n.itens,obra:d.obra||'',empresa:em});
+        valor:n.valor,itens:n.itens,obra:d.obra||'',empresa:em,pedido:n._ped?n._ped.id:''});
+      if(n._ped){n._ped.status='Recebido';put('compras',n._ped);pedidos++}
       put('financeiro',{tipo:'Pagar',descricao:'NF-e '+String(n.chave).slice(-8)+' · '+n.fornecedor_nome,
         categoria:'Material',valor:n.valor,vencimento:d.venc,fornecedor:forn.id,obra:d.obra||'',empresa:em,status:'Pendente'});
     });
-    closeM();toast('Importado — estoque e contas atualizados'+(novos?' · '+novos+' produto(s) criados':''));if(depois)depois(notas);render();
+    closeM();toast('Importado — estoque e contas atualizados'+(novos?' · '+novos+' produto(s) criados':'')+(pedidos?' · '+pedidos+' pedido(s) de compra recebido(s)':''));if(depois)depois(notas);render();
   },true);
 }
 /* ---------- financeiro ---------- */
