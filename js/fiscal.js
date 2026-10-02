@@ -158,14 +158,31 @@ async function fiscalMostrar(){
   on('fcCie',()=>fiscalCiencia(g.resumos));
 }
 
+// conta a receber em aberto do mesmo cliente (pelo CPF/CNPJ) com valor igual (±1%); a de valor mais próximo vence
+function receberDaNota(n,usados){
+  if(n.direcao!=='Emitida'||!n.contraparte_doc)return null;
+  const ids=S.clientes.filter(c=>soDig(c.documento)===soDig(n.contraparte_doc)).map(c=>c.id);
+  if(!ids.length)return null;
+  const tol=Math.max(1,Number(n.valor||0)*0.01);
+  return S.financeiro.filter(l=>l.tipo==='Receber'&&(l.status==='Pendente'||l.status==='Atrasado')&&!l.nfe_chave&&!usados.has(l.id)&&
+      ids.includes(l.cliente)&&Math.abs(Number(l.valor||0)-Number(n.valor||0))<=tol)
+    .sort((a,b)=>Math.abs(a.valor-n.valor)-Math.abs(b.valor-n.valor))[0]||null;
+}
 async function fiscalRegistrar(notas){
   const novas=notas.filter(n=>!S.nfe.some(x=>soDig(x.chave)===soDig(n.chave)));
   const pagar=novas.filter(n=>n.modelo==='NFS-e'&&n.direcao==='Recebida');
-  if(!await ask('Registrar '+novas.length+' nota(s)'+(pagar.length?' e criar '+pagar.length+' conta(s) a pagar (vencimento em 30 dias)':'')+'?','Registrar'))return;
+  const usados=new Set(),liga=new Map();
+  novas.forEach(n=>{const l=receberDaNota(n,usados);if(l){usados.add(l.id);liga.set(n,l)}});
+  const emitidas=novas.filter(n=>n.direcao==='Emitida'),semConta=emitidas.length-liga.size;
+  if(!await ask('Registrar '+novas.length+' nota(s)'+(pagar.length?' e criar '+pagar.length+' conta(s) a pagar (vencimento em 30 dias)':'')+'?'+
+    (liga.size?' '+liga.size+' emitida(s) serão vinculadas a contas a receber em aberto (o recebimento continua pendente).':'')+
+    (semConta?' '+semConta+' emitida(s) não têm conta a receber correspondente — confira o financeiro.':''),'Registrar'))return;
   novas.forEach(n=>{
     const emp=S.empresas.find(e=>soDig(e.cnpj)===n.empresa_doc),em=emp?emp.id:(UNID||empresaPadrao());
     put('nfe',{chave:n.chave,modelo:n.modelo,direcao:n.direcao,contraparte:n.contraparte||'',contraparte_doc:n.contraparte_doc||'',
-      emissao:n.emissao,valor:n.valor,itens:n.itens||[],descricao:n.descricao||'',empresa:em});
+      emissao:n.emissao,valor:n.valor,itens:n.itens||[],descricao:n.descricao||'',empresa:em,
+      receber:liga.has(n)?liga.get(n).id:''});
+    if(liga.has(n)){const l=liga.get(n);l.nfe_chave=n.chave;put('financeiro',l)}
     if(n.modelo==='NFS-e'&&n.direcao==='Recebida'){
       let forn=S.fornecedores.find(f=>n.contraparte_doc&&soDig(f.cnpj)===soDig(n.contraparte_doc));
       if(!forn)forn=put('fornecedores',{nome:n.contraparte||'Prestador não identificado',cnpj:n.contraparte_doc,categoria:'Serviços'});

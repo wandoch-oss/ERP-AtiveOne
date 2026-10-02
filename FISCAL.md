@@ -14,9 +14,9 @@ sem você confirmar.
 | Nota | Ao importar |
 |---|---|
 | NF-e recebida (CNPJ é o destinatário) | Conferência de sempre: entrada no estoque, conta a pagar, rateio por projeto. Se houver pedido de compra em aberto (Enviado/Confirmado) do mesmo fornecedor com o mesmo valor (±1%), ele é indicado e marcado como Recebido |
-| NF-e emitida pela empresa | Só registra na lista de notas |
+| NF-e emitida pela empresa | Registra na lista de notas e vincula à conta a receber em aberto do mesmo cliente (pelo CPF/CNPJ do cadastro) com o mesmo valor (±1%). Não dá baixa: o recebimento continua pendente. Sem correspondência, aparece o selo “sem conta a receber” |
 | NFS-e recebida | Registra e cria conta a pagar (vencimento em 30 dias) |
-| NFS-e emitida | Só registra |
+| NFS-e emitida | Mesmo tratamento da NF-e emitida |
 | Resumo de NF-e (`resNFe`) | Botão **Dar ciência e liberar o XML**: registra a Ciência da operação (evento 210210) na Receita; o XML completo chega na próxima busca |
 
 ## Limites que vêm da Receita (não do sistema)

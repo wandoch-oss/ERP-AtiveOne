@@ -1977,6 +1977,7 @@ R.compras=v=>{
   const ln=document.getElementById('lnf');
   ln.innerHTML=tbl([{l:'Emissão',f:r=>dBR(r.emissao)},{l:'Nota',f:r=>'<span class="bg '+(r.direcao==='Emitida'?'g-accent':'g-gray')+'">'+esc((r.modelo||'NF-e')+' '+(r.direcao||'recebida').toLowerCase())+'</span>'},
     {l:'Fornecedor / cliente',s:1,f:r=>esc(r.contraparte||r.fornecedor_nome||'—')},
+    {l:'Vínculo',f:r=>r.receber&&byId('financeiro',r.receber)?'<span class="bg g-green">conta a receber</span>':r.pedido&&byId('compras',r.pedido)?'<span class="bg g-green">pedido de compra</span>':r.direcao==='Emitida'?'<span class="bg g-amber">sem conta a receber</span>':'<span class="bg g-gray">—</span>'},
     {l:'Chave',f:r=>'<span style="font-size:11px">'+esc(String(r.chave||'').slice(0,12))+'…</span>'},
     {l:'Itens',n:1,f:r=>(r.itens||[]).length},{l:'Valor',n:1,f:r=>money(r.valor)},
     {l:'Projeto',f:r=>r.obra?esc(nm('obras',r.obra,'codigo')):'<span class="bg g-gray">estoque geral</span>'}],
