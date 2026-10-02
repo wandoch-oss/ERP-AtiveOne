@@ -1222,7 +1222,7 @@ function abrirObra(oid){
   const draw=()=>{
     const cm=custoMaterialObra(oid),cmo=custoMaoObra(oid),ct=custoTerceiros(oid),tot=cm+cmo+ct,rec=receitaObra(oid);
     let h='';
-    h+='<div class="tabs">'+[['resultado','Resultado'],['etapas','Etapas'],['cron','Cronograma'],['res','Reservas'],['horas','Horas'],['mat','Materiais'],
+    h+='<div class="tabs">'+[['resultado','Resultado'],['etapas','Etapas'],['cron','Cronograma'],['arq','Arquivos'+((o.arquivos||[]).length?' ('+o.arquivos.length+')':'')],['res','Reservas'],['horas','Horas'],['mat','Materiais'],
       ['adt','Aditivos'],['custo','Orçado × realizado'],['os','Atendimentos'],['ent','Entrega']]
       .map(t=>'<button class="tab'+(obraTab===t[0]?' on':'')+'" data-tab="'+t[0]+'">'+t[1]+'</button>').join('')+'</div><div id="tb"></div>';
     h+='<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn sec sm" id="ed">Editar projeto</button>'+
@@ -1244,6 +1244,8 @@ function abrirObra(oid){
         {l:'',n:1,f:e=>e.status!=='Concluída'?'<button class="btn sec sm" data-et="'+esc(e.nome)+'">Concluir</button>':''}],
         (o.etapas||[]).map((e,i)=>Object.assign({id:'e'+i},e)),{empty:'Sem etapas.'});
       tb.querySelectorAll('[data-et]').forEach(b=>b.onclick=()=>concluirEtapa(o,b.dataset.et,draw));
+    }else if(obraTab==='arq'){
+      tb.innerHTML=arquivosObraHtml(o);wireArquivosObra(tb,o,draw);
     }else if(obraTab==='cron'){
       tb.innerHTML=cronogramaObraHtml(o);wireCronogramaObra(tb,o,draw);
     }else if(obraTab==='horas'){
@@ -2746,7 +2748,7 @@ async function removerArquivo(d){
   }catch(e){}
 }
 const urlDoc=d=>d.url||(d.asset?'/_blob/'+d.asset:'');
-const erroUpload=e=>({unsupported_type:'Envie PDF, PNG, JPG ou WEBP. Documentos do Word precisam ser salvos em PDF.',
+const erroUpload=e=>({unsupported_type:'Envie PDF ou imagem (PNG, JPG, WEBP). Arquivos do Word ou DWG precisam ser salvos em PDF antes.',
   too_large:'Arquivo acima de 20 MB.',quota_or_state:'O espaço de armazenamento de arquivos está cheio.',
   not_granted:'Seu acesso a este sistema não permite enviar arquivos.',rate_limited:'Muitos envios seguidos — aguarde alguns segundos.',
   sem_upload:'Envio de arquivos disponível no sistema publicado (claude.ai ou Firebase).',
