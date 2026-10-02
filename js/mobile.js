@@ -6,7 +6,7 @@ const isMobile=()=>modoDisp==='mobile'||(modoDisp==='auto'&&MQ_CEL.matches);
 if(MQ_CEL.addEventListener)MQ_CEL.addEventListener('change',()=>{if(modoDisp==='auto')render()});
 function setDevice(m){modoDisp=m;try{localStorage.setItem('ao-disp',m)}catch(e){}window.scrollTo(0,0);fecharSheet();render()}
 
-const ACOES_RAPIDAS=[['filetext','Novo orçamento',()=>novoOrc()],['users','Novo cliente',()=>editRec('clientes',null)],['funnel','Nova oportunidade',()=>editRec('oportunidades',null)],
+const ACOES_RAPIDAS=[['users','Novo cliente',()=>editRec('clientes',null)],['funnel','Nova oportunidade',()=>editRec('oportunidades',null)],['filetext','Novo orçamento',()=>novoOrc()],
   ['wrench','Nova OS',()=>editRec('os',null)],['dollar','Novo lançamento',()=>editRec('financeiro',null)],['calendar','Compromisso',()=>editRec('agenda',null)]];
 const GRUPO_COM=['clientes','oportunidades','orcamentos','vendas'],GRUPO_FIN=['financeiro','bancos','conciliacao','fluxo','dre','dre_contabil'];
 const rotRota=k=>((NAV.flatMap(g=>g.i).find(i=>i[0]===k))||[,k])[1];

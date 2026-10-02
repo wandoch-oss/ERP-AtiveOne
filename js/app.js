@@ -710,7 +710,7 @@ R.painel=v=>{
   const ag=S.agenda.filter(a=>a.data===hoje());
   const vm=U('vendas').filter(x=>x.status!=='Cancelada'&&mesDe(x.data)===mes);
   const hr=new Date().getHours(),saud=hr<12?'Bom dia':hr<18?'Boa tarde':'Boa noite';
-  const rap=[['filetext','Novo orçamento','novoOrc()'],['users','Novo cliente',"editRec('clientes',null)"],['funnel','Nova oportunidade',"editRec('oportunidades',null)"],
+  const rap=[['users','Novo cliente',"editRec('clientes',null)"],['funnel','Nova oportunidade',"editRec('oportunidades',null)"],['filetext','Novo orçamento','novoOrc()'],
     ['wrench','Nova ordem de serviço',"editRec('os',null)"],['dollar','Novo lançamento',"editRec('financeiro',null)"],['calendar','Agenda',"go('agenda')"]];
   v.innerHTML='<div class="hero"><div class="hero-t"><div class="hero-h">'+saud+'.</div><div class="hero-s">'+dBR(hoje())+' · '+(ativas.length?ativas.length+' projeto(s) em execução':'nenhum projeto em execução')+
     (venc.length?' · '+venc.length+' conta(s) vencida(s)':'')+'</div></div><div class="quick">'+rap.map(r=>'<button class="qa" data-qa="'+esc(r[2])+'"><span class="qi">'+ic(r[0],20)+'</span><span>'+r[1]+'</span></button>').join('')+'</div></div>'+
