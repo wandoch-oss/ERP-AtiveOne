@@ -1,4 +1,4 @@
-# Ative Hub — Gestão de Automação
+# Ative Hub
 
 ERP web sem build para empresas de automação residencial e predial.
 
