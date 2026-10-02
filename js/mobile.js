@@ -1,9 +1,10 @@
 /* ---------- versão para celular: uma coluna, barra inferior e botão de atalho ---------- */
-const MQ_CEL=window.matchMedia('(max-width: 760px)');
-let modoDisp='auto';try{modoDisp=localStorage.getItem('ao-device')||'auto'}catch(e){}
+// automático: só vira celular em tela estreita com toque (janela estreita no computador continua na versão computador)
+const MQ_CEL=window.matchMedia('(max-width: 760px) and (pointer: coarse)');
+let modoDisp='auto';try{localStorage.removeItem('ao-device');modoDisp=localStorage.getItem('ao-disp')||'auto'}catch(e){}
 const isMobile=()=>modoDisp==='mobile'||(modoDisp==='auto'&&MQ_CEL.matches);
 if(MQ_CEL.addEventListener)MQ_CEL.addEventListener('change',()=>{if(modoDisp==='auto')render()});
-function setDevice(m){modoDisp=m;try{localStorage.setItem('ao-device',m)}catch(e){}window.scrollTo(0,0);fecharSheet();render()}
+function setDevice(m){modoDisp=m;try{localStorage.setItem('ao-disp',m)}catch(e){}window.scrollTo(0,0);fecharSheet();render()}
 
 const ACOES_RAPIDAS=[['filetext','Novo orçamento',()=>novoOrc()],['users','Novo cliente',()=>editRec('clientes',null)],['funnel','Nova oportunidade',()=>editRec('oportunidades',null)],
   ['wrench','Nova OS',()=>editRec('os',null)],['dollar','Novo lançamento',()=>editRec('financeiro',null)],['calendar','Compromisso',()=>editRec('agenda',null)]];
