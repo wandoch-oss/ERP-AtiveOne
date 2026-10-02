@@ -194,10 +194,10 @@ h1,h2,.nav,.btn,.tab,.subtab,.kpi .v,.hero-h,.qa,.ng{font-family:var(--font-d)}
 
 #side{width:244px;background:var(--side-bg);background-image:repeating-linear-gradient(115deg,rgba(255,255,255,.028) 0 1px,transparent 1px 40px);
   border-right:1px solid rgba(255,255,255,.06);padding:18px 12px}
-.brand{position:relative;width:168px;margin:2px auto 14px;padding-bottom:16px}
+.brand{position:relative;width:206px;margin:4px auto 16px;padding-bottom:24px}
 .brand img{display:block;width:100%;height:auto}
-.brand-one{position:absolute;left:73%;transform:translateX(-50%);bottom:0;font-family:var(--font-d);font-weight:300;font-size:9px;letter-spacing:.7em;color:#b9bfcb;padding-left:.7em;
-  border-top:1px solid #4a5060;padding-top:3px;width:46%;text-align:center}
+.brand-one{position:absolute;left:73%;transform:translateX(-50%);bottom:0;font-family:var(--font-d);font-weight:500;font-size:14px;letter-spacing:.55em;color:#e3e6ec;padding-left:.55em;
+  border-top:1px solid #4a5060;padding-top:4px;width:50%;text-align:center;line-height:1.2}
 .ng{color:var(--side-faint);font-size:10px;letter-spacing:.14em;padding:16px 10px 6px}
 .nav{color:var(--side-text);padding:6px 10px;border-radius:9px;gap:11px;font-size:13px;position:relative;font-weight:400}
 .nav .ni{display:grid;place-items:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,.05);color:#aab1c1;transition:.15s}
