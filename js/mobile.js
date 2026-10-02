@@ -39,8 +39,9 @@ function abrirSheet(tipo){
   else if(tipo==='fab'){t='Criar novo';h='<div class="mtiles">'+ACOES_RAPIDAS.map((a,i)=>'<button class="mtile" data-fab="'+i+'"><span class="acc">'+ic(a[0],22)+'</span>'+a[1]+'</button>').join('')+'</div>'}
   else{
     t='Menu';
-    h=NAV.filter(g=>g.g&&!['Comercial','Financeiro'].includes(g.g)).map(g=>'<div class="mgl">'+esc(g.g)+'</div>'+tiles(g.i.map(i=>i[0]))).join('')+
-      '<div class="mgl">Comercial</div>'+tiles(GRUPO_COM)+'<div class="mgl">Financeiro</div>'+tiles(GRUPO_FIN);
+    // o que já tem atalho na barra inferior (Painel, Comercial, Projetos, Financeiro) não se repete aqui
+    h=NAV.filter(g=>g.g&&!['Comercial','Financeiro'].includes(g.g)).map(g=>({g:g.g,r:g.i.map(i=>i[0]).filter(k=>k!=='obras')})).filter(g=>g.r.length)
+      .map(g=>'<div class="mgl">'+esc(g.g)+'</div>'+tiles(g.r)).join('');
     if(S.empresas.filter(e=>ativo(e)).length>1){
       h+='<div class="mgl">Unidade</div><select id="mUnid"><option value="">Todas as unidades</option>'+S.empresas.filter(e=>ativo(e)).map(e=>'<option value="'+e.id+'"'+(UNID===e.id?' selected':'')+'>'+esc(e.nome_fantasia||e.razao_social)+'</option>').join('')+'</select>';
     }
