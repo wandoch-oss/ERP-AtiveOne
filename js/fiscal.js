@@ -18,7 +18,8 @@ function fiscalCard(){
       '<div class="note" style="margin:0 0 10px">CNPJ consultado: <b>'+esc(fmtCNPJ(emp.cnpj))+'</b> · '+esc(emp.nome_fantasia||emp.razao_social)+
         '<span id="fiscSt"></span></div>'+
       '<div class="toolbar" style="margin:0"><button class="btn" id="fiscGo">Buscar notas agora</button>'+
-      '<button class="btn sec" id="fiscPend">Ver notas encontradas</button></div>'+
+      '<button class="btn sec" id="fiscPend">Ver notas encontradas</button>'+
+      '<button class="btn sec" id="fiscHist">Histórico de consultas</button></div>'+
       '<div id="fiscAuto" class="note" style="margin-top:10px"></div>'+
       '<div class="note">Traz as notas em que o CNPJ aparece (compras e, quando a Receita informar, vendas) e as NFS-e. '+
       'Nada entra no estoque ou no financeiro sem você conferir.</div>'
@@ -31,12 +32,16 @@ async function fiscalWire(){
   const go=document.getElementById('fiscGo');if(!go)return;
   go.onclick=fiscalBuscar;
   document.getElementById('fiscPend').onclick=()=>fiscalMostrar();
+  document.getElementById('fiscHist').onclick=()=>fiscalHistorico();
   const emp=fiscalEmpresa(),st=document.getElementById('fiscSt');
   try{
     const {data}=await SB.from('fiscal_cursor').select('servico,consultado_em,proxima_consulta').eq('org_id',ORG).eq('cnpj',soDig(emp.cnpj));
     const ult=(data||[]).map(c=>c.consultado_em).filter(Boolean).sort().pop();
     const {count}=await SB.from('fiscal_docs').select('nsu',{count:'exact',head:true}).eq('org_id',ORG).eq('processado',false);
-    if(st&&document.body.contains(st))st.innerHTML=(ult?' · última consulta '+esc(new Date(ult).toLocaleString('pt-BR')):' · ainda não consultado')+
+    const {data:ci}=await SB.from('fiscal_cert_info').select('validade,titular').eq('org_id',ORG).eq('cnpj',soDig(emp.cnpj)).maybeSingle();
+    const cert=ci?(diasAte(ci.validade)<0?' · <b style="color:var(--red)">certificado vencido</b>':' · certificado válido até '+esc(dBR(ci.validade))):
+      ' · <b style="color:var(--amber)">sem certificado enviado</b> (Cadastros → Empresas → Certificado digital)';
+    if(st&&document.body.contains(st))st.innerHTML=cert+(ult?' · última consulta '+esc(new Date(ult).toLocaleString('pt-BR')):' · ainda não consultado')+
       (count?' · <b>'+count+' documento(s) esperando conferência</b>':'');
   }catch(e){}
   fiscalAutoDesenhar();
@@ -278,4 +283,87 @@ function fiscalManifestar(id){
   });
   const sel=document.getElementById('f_tipo');
   if(sel)sel.onchange=()=>{document.getElementById('mfAj').textContent=MANIF_AJUDA[sel.value]||''};
+}
+
+/* ---------- certificado digital no cadastro da empresa ---------- */
+function fiscalCertTela(emp){
+  if(!emp)return '<div class="empty">Salve a empresa primeiro. Em seguida esta aba libera o envio do certificado digital.</div>';
+  if(MODE!=='supabase')return '<div class="empty">O envio do certificado precisa do modo Supabase (login e servidor). Veja o FISCAL.md.</div>';
+  return '<div class="card" style="margin-bottom:12px"><div class="cbody"><div id="certInfo" class="note" style="margin:0">Consultando…</div></div></div>'+
+    (ehAdmin()?'<div class="fsec">Enviar certificado A1</div>'+
+      '<label class="f"><span>Arquivo do certificado (.pfx ou .p12)</span><input type="file" id="certFl" accept=".pfx,.p12"></label>'+
+      '<label class="f"><span>Senha do certificado</span><input type="password" id="certPw" autocomplete="off" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2)"></label>'+
+      '<button class="btn sm" id="certUp">Enviar certificado</button> <span class="note" id="certMsg"></span>'+
+      '<div class="note">O arquivo e a senha seguem por conexão segura até a função no Supabase. A senha <b>não é guardada</b>; o certificado fica '+
+      'cifrado no banco e nunca volta para o navegador. É usado só para consultar a Receita. Só o administrador envia ou remove. '+
+      'Use o certificado A1 do CNPJ desta empresa.</div>':
+      '<div class="note">Só o administrador envia ou remove o certificado.</div>');
+}
+async function fiscalCertWire(emp){
+  const info=document.getElementById('certInfo');if(!info||!emp||MODE!=='supabase')return;
+  const cnpj=soDig(emp.cnpj),msg=document.getElementById('certMsg');
+  const desenhar=async()=>{
+    const {data}=await SB.from('fiscal_cert_info').select('*').eq('org_id',ORG).eq('cnpj',cnpj).maybeSingle();
+    if(!document.body.contains(info))return;
+    if(!data){info.innerHTML='<span class="bg g-amber">sem certificado</span> Nenhum certificado enviado para este CNPJ.';return}
+    const d=diasAte(data.validade);
+    info.innerHTML='<span class="bg '+(d<0?'g-red':d<=30?'g-amber':'g-green')+'">'+(d<0?'vencido':d<=30?'vence em '+d+' dia(s)':'válido')+'</span> '+
+      '<b>'+esc(data.titular||'—')+'</b><br>Validade: '+esc(dBR(data.validade))+' · enviado em '+esc(new Date(data.enviado_em).toLocaleDateString('pt-BR'))+
+      ' · impressão digital '+esc(String(data.fingerprint||'').slice(0,12))+'…'+
+      (ehAdmin()?'<br><button class="btn dgr sm" id="certRm" style="margin-top:8px">Remover certificado</button>':'');
+    const rm=document.getElementById('certRm');
+    if(rm)rm.onclick=async()=>{
+      if(!await ask('Remover o certificado desta empresa? A busca de notas para este CNPJ para de funcionar até enviar outro.','Remover'))return;
+      const r=await fiscalCertChamar({acao:'certificado_remover',org_id:ORG,cnpj:cnpj});
+      if(r.erro){toast(r.erro);return}
+      toast('Certificado removido');desenhar();
+    };
+  };
+  desenhar();
+  const up=document.getElementById('certUp');
+  if(up)up.onclick=async()=>{
+    const f=document.getElementById('certFl').files[0],pw=document.getElementById('certPw');
+    if(!f){msg.textContent='Escolha o arquivo .pfx ou .p12.';return}
+    if(f.size>200*1024){msg.textContent='Arquivo grande demais para um certificado A1.';return}
+    if(!pw.value){msg.textContent='Informe a senha do certificado.';return}
+    if(!cnpjValido(emp.cnpj)){msg.textContent='Corrija o CNPJ da empresa antes.';return}
+    up.disabled=true;msg.textContent='Enviando…';
+    let bin='';new Uint8Array(await f.arrayBuffer()).forEach(b=>bin+=String.fromCharCode(b));
+    const r=await fiscalCertChamar({acao:'certificado_enviar',org_id:ORG,cnpj:cnpj,pfx_b64:btoa(bin),senha:pw.value});
+    pw.value='';up.disabled=false;
+    if(r.erro){msg.textContent=r.erro;return}
+    msg.textContent='';document.getElementById('certFl').value='';toast('Certificado guardado');desenhar();
+  };
+}
+async function fiscalCertChamar(body){
+  const {data,error}=await SB.functions.invoke('buscar-notas',{body:body});
+  if(error){let m=error.message||'erro';try{const j=await error.context.json();if(j&&j.erro)m=j.erro}catch(e){}return{erro:m}}
+  return data||{};
+}
+
+/* ---------- histórico de consultas ---------- */
+const FISCAL_ACOES={buscar:'Busca',ciencia:'Ciência',confirmacao:'Confirmação',desconhecimento:'Desconhecimento',nao_realizada:'Não realizada',certificado:'Certificado'};
+function fiscalStatusBadge(l){
+  const st=String(l.status||'');
+  if(st==='erro'||st==='656'||/^(5|4)\d\d$/.test(st))return '<span class="bg g-red">'+esc(st==='656'?'656 · consumo indevido':st)+'</span>';
+  if(st==='aguardar')return '<span class="bg g-amber">aguardando intervalo</span>';
+  if(l.novos>0||['138','135','136','573','enviado','removido','200'].includes(st))return '<span class="bg g-green">'+esc(st==='138'?'138 · notas novas':st)+'</span>';
+  if(st==='137'||st==='404')return '<span class="bg g-gray">'+esc(st==='137'?'137 · nada novo':st)+'</span>';
+  return '<span class="bg g-gray">'+esc(st||'—')+'</span>';
+}
+async function fiscalHistorico(){
+  const {data,error}=await SB.from('fiscal_log').select('*').eq('org_id',ORG).order('criado_em',{ascending:false}).limit(100);
+  if(error){toast('Erro ao ler o histórico: '+error.message);return}
+  const erros=(data||[]).filter(l=>l.status==='erro'||l.status==='656').length;
+  openM('Histórico de consultas à Receita',
+    '<div class="note" style="margin:0 0 10px">Últimas '+(data||[]).length+' operações'+(erros?' · <b style="color:var(--red)">'+erros+' com erro</b>':'')+
+    '. 137 = nada novo · 138 = notas novas · 656 = a Receita pediu para esperar ~1 hora · 135/136/573 = manifestação aceita.</div>'+
+    tbl([{l:'Quando',f:l=>'<span style="white-space:nowrap">'+esc(new Date(l.criado_em).toLocaleString('pt-BR'))+'</span>'},
+      {l:'CNPJ',f:l=>'<span style="font-size:11.5px">'+esc(fmtCNPJ(l.cnpj))+'</span>'},
+      {l:'Operação',s:1,f:l=>esc((FISCAL_ACOES[l.acao]||l.acao)+(l.servico?' · '+(l.servico==='nfse'?'NFS-e':'NF-e'):''))},
+      {l:'Resultado',f:fiscalStatusBadge},
+      {l:'Notas',n:1,f:l=>l.novos==null?'—':l.novos},
+      {l:'Origem',f:l=>'<span class="bg '+(l.origem==='agendada'?'g-purple':'g-gray')+'">'+esc(l.origem)+'</span>'},
+      {l:'Mensagem',f:l=>'<span style="font-size:12px">'+esc(l.mensagem||'')+'</span>'}],
+      data||[],{empty:'Nenhuma consulta feita ainda.'}),null,null,true);
 }

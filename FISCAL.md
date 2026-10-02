@@ -19,6 +19,19 @@ sem você confirmar.
 | NFS-e emitida | Mesmo tratamento da NF-e emitida |
 | Resumo de NF-e (`resNFe`) | Botão **Dar ciência e liberar o XML**: registra a Ciência da operação (evento 210210) na Receita; o XML completo chega na próxima busca |
 
+## Segurança do certificado
+- O certificado A1 contém a chave privada da empresa: quem o usa pode assinar em nome dela. Por isso o arquivo e a senha
+  vão por HTTPS direto à função; a **senha não é gravada**; os PEMs ficam **cifrados (AES-GCM)** numa tabela sem nenhuma
+  regra de acesso para o navegador, e a tela só recebe titular, validade e impressão digital.
+- Quem tiver a chave de serviço do Supabase **e** o `CERT_KEY` consegue abrir o certificado. Proteja os dois (e o acesso ao
+  painel do Supabase) como protegeria o próprio certificado.
+- Só o administrador da empresa envia ou remove. O certificado vence (A1 dura 1 ano): a tela avisa 30 dias antes.
+
+## Histórico de consultas
+Em Compras → Buscar notas na Receita → **Histórico de consultas** aparecem as últimas 100 operações: buscas (manuais e
+agendadas), manifestações e envio/remoção de certificado, com o código da Receita, quantas notas vieram e a mensagem.
+Serve para diagnosticar o primeiro teste: erro de certificado, 656 (esperar ~1 hora), 137 (nada novo) etc.
+
 ## Manifestação do destinatário
 Na lista **Notas importadas**, a coluna *Manifestação* tem o botão **Manifestar** para NF-e recebidas:
 Confirmação da operação (210200), Desconhecimento (210220) e Operação não realizada (210240, com justificativa de 15 a 255
@@ -38,21 +51,26 @@ passam de 3 dias.
   respeita isso e avisa até que horas.
 
 ## Implantação
-1. Rode de novo `supabase/schema.sql` no SQL Editor (cria `fiscal_cursor` e `fiscal_docs`).
-2. Converta o certificado `.pfx` em PEM (no seu computador):
+1. Rode de novo `supabase/schema.sql` no SQL Editor (cria as tabelas fiscais, o histórico e o cofre do certificado).
+2. Defina o segredo que cifra os certificados guardados no banco (uma frase longa e aleatória, 16+ caracteres; **guarde-a
+   num gerenciador de senhas — se ela mudar, será preciso reenviar os certificados**):
    ```
-   openssl pkcs12 -in certificado.pfx -clcerts -nokeys -out cert.pem -legacy
-   openssl pkcs12 -in certificado.pfx -nocerts -nodes  -out key.pem  -legacy
+   supabase secrets set CERT_KEY="uma-frase-longa-e-aleatoria"
    ```
-   (se a sua versão do openssl não aceitar `-legacy`, tire essa opção)
-3. Guarde nos *secrets* da função (nunca no site nem no repositório):
-   ```
-   supabase secrets set CERT_PEM="$(cat cert.pem)" KEY_PEM="$(cat key.pem)"
-   ```
-   Se a conexão com a SEFAZ falhar por certificado desconhecido, a cadeia ICP-Brasil não está no
-   servidor: baixe a cadeia no site do ITI e informe em `SEFAZ_CA_PEM` do mesmo jeito.
-4. Publique a função: `supabase functions deploy buscar-notas`
-5. Apague `cert.pem` e `key.pem` do computador.
+3. Publique a função: `supabase functions deploy buscar-notas`
+4. No sistema, **Cadastros → Empresas → (a empresa) → Certificado digital**: escolha o `.pfx`/`.p12` do certificado A1, digite a
+   senha e envie. O sistema mostra titular, validade e impressão digital; o administrador pode remover quando quiser.
+   Cada empresa/CNPJ tem o seu certificado.
+5. Se a conexão com a SEFAZ falhar por certificado desconhecido, a cadeia ICP-Brasil não está no servidor: baixe a cadeia no site
+   do ITI e informe em `SEFAZ_CA_PEM` (`supabase secrets set SEFAZ_CA_PEM="$(cat cadeia.pem)"`).
+
+> **Alternativa sem o cadastro:** ainda dá para usar um único certificado para tudo guardando os PEMs nos secrets
+> `CERT_PEM` e `KEY_PEM` (veja abaixo). É usada quando a empresa não tem certificado enviado pela tela.
+> ```
+> openssl pkcs12 -in certificado.pfx -clcerts -nokeys -out cert.pem -legacy
+> openssl pkcs12 -in certificado.pfx -nocerts -nodes  -out key.pem  -legacy
+> supabase secrets set CERT_PEM="$(cat cert.pem)" KEY_PEM="$(cat key.pem)"
+> ```
 6. Cadastre a empresa com **CNPJ válido e UF** (Cadastros → Empresas) e use o botão em Compras.
 7. **Busca automática diária** (opcional, faça só depois de validar a busca manual em homologação):
    - `supabase secrets set CRON_SECRET="uma-frase-longa-e-aleatoria"`

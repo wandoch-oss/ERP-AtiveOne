@@ -2859,8 +2859,10 @@ function editarEmpresa(id,after,aba){
     const docs=(orig&&orig.documentos)||[];
     const venc=docs.filter(d=>d.validade&&diasAte(d.validade)<0).length;
     let h='<div class="tabs">'+[['dados','Dados'],['end','Endereço e contato'],['resp','Responsável e banco'],
-      ['docs','Documentos ('+docs.length+')'+(venc?' ⚠':'')]].map(t=>'<button class="tab'+(empTab===t[0]?' on':'')+'" data-et="'+t[0]+'">'+t[1]+'</button>').join('')+'</div>';
-    if(empTab!=='docs'){
+      ['docs','Documentos ('+docs.length+')'+(venc?' ⚠':'')],['cert','Certificado digital']].map(t=>'<button class="tab'+(empTab===t[0]?' on':'')+'" data-et="'+t[0]+'">'+t[1]+'</button>').join('')+'</div>';
+    if(empTab==='cert'){
+      h+=typeof fiscalCertTela==='function'?fiscalCertTela(orig):''
+    }else if(empTab!=='docs'){
       h+=formHtml(campos()[empTab],e);
       if(empTab==='dados'&&e.cnpj&&!cnpjValido(e.cnpj))h+='<div class="note" style="color:var(--red)">CNPJ inválido — confira os dígitos.</div>';
     }else if(!orig){
@@ -2888,7 +2890,8 @@ function editarEmpresa(id,after,aba){
       (orig?'<button class="btn '+(ativo(orig)?'dgr':'sec')+' sm" id="eCa" style="margin-right:auto">'+(ativo(orig)?'Cancelar empresa':'Reativar empresa')+'</button>':'')+
       '<button class="btn sec" onclick="closeM()">Fechar</button><button class="btn" id="eSv">Salvar</button></div>';
     ovl.classList.add('on');
-    modal.querySelectorAll('[data-et]').forEach(b=>b.onclick=()=>{if(empTab!=='docs')ler();empTab=b.dataset.et;draw()});
+    if(empTab==='cert'&&typeof fiscalCertWire==='function')fiscalCertWire(orig);
+    modal.querySelectorAll('[data-et]').forEach(b=>b.onclick=()=>{if(empTab!=='docs'&&empTab!=='cert')ler();empTab=b.dataset.et;draw()});
     const tp=modal.querySelector('[data-k="tipo"]');if(tp)tp.onchange=()=>{ler();if(e.tipo==='Matriz')e.matriz='';draw()};
     const cn=modal.querySelector('[data-k="cnpj"]');if(cn)cn.onblur=()=>{ler();e.cnpj=fmtCNPJ(e.cnpj);draw()};
     const cp=modal.querySelector('[data-k="cep"]');if(cp)cp.onblur=()=>{cp.value=fmtCEP(cp.value)};
@@ -2922,7 +2925,7 @@ function editarEmpresa(id,after,aba){
       put('empresas',orig);toast(orig.status==='Ativa'?'Empresa reativada':'Empresa cancelada');fim();
     };
     document.getElementById('eSv').onclick=async()=>{
-      if(empTab!=='docs')ler();
+      if(empTab!=='docs'&&empTab!=='cert')ler();
       e.razao_social=String(e.razao_social||'').trim();e.cnpj=fmtCNPJ(e.cnpj);
       if(!e.razao_social){empTab='dados';draw();toast('Informe a razão social');return}
       if(!cnpjValido(e.cnpj)){empTab='dados';draw();toast('CNPJ inválido');return}

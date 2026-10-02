@@ -2,6 +2,8 @@
 // com o certificado A1 da empresa e guarda os XMLs em public.fiscal_docs.
 // Passo a passo de implantação: FISCAL.md.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import forge from 'npm:node-forge@1';
+import { cifrar, decifrar, lerPfx } from './cofre.ts';
 import { envelopeDistDFe, envelopeEvento, ESPERA_MS, eventoManifestacao, lerRetDistDFe, lerRetEvento, lerRetNFSe, nsu15, soDigitos, URL_DISTDFE, URL_EVENTO, URL_NFSE, type Doc } from './fiscal.ts';
 
 const CORS = {
@@ -14,15 +16,39 @@ const MAX_LOTES = 10; // 50 documentos por lote na SEFAZ
 
 type Resultado = { novos: number; status: string; msg: string; aguardar_ate?: string };
 
-function abrirCliente() {
-  // certificado A1 em PEM (secrets da função) — nunca vai para o navegador
-  const cert = Deno.env.get('CERT_PEM'), key = Deno.env.get('KEY_PEM'), ca = Deno.env.get('SEFAZ_CA_PEM');
-  if (!cert || !key) return null;
-  // deno-lint-ignore no-explicit-any
-  const client = (Deno as any).createHttpClient({ cert, key, ...(ca ? { caCerts: [ca] } : {}) });
-  return { cert, key, client };
+// deno-lint-ignore no-explicit-any
+type Db = any;
+type Cred = { cert: string; key: string };
+const SEM_CERT = 'Nenhum certificado digital para este CNPJ. Envie o .pfx em Cadastros → Empresas → Certificado digital.';
+
+// 1º o certificado enviado pelo cadastro da empresa (cifrado no banco); 2º os secrets da função (CERT_PEM/KEY_PEM)
+async function credenciais(db: Db, org_id: string, cnpj: string): Promise<Cred | null> {
+  const segredo = Deno.env.get('CERT_KEY');
+  if (segredo) {
+    const { data } = await db.from('fiscal_cert_segredo').select('cert_enc,key_enc').match({ org_id, cnpj }).maybeSingle();
+    if (data) return { cert: await decifrar(segredo, data.cert_enc), key: await decifrar(segredo, data.key_enc) };
+  }
+  const cert = Deno.env.get('CERT_PEM'), key = Deno.env.get('KEY_PEM');
+  return cert && key ? { cert, key } : null;
 }
-const SEM_CERT = 'Certificado não configurado (secrets CERT_PEM e KEY_PEM). Veja FISCAL.md.';
+function abrirCliente(c: Cred) {
+  const ca = Deno.env.get('SEFAZ_CA_PEM');
+  // deno-lint-ignore no-explicit-any
+  return (Deno as any).createHttpClient({ cert: c.cert, key: c.key, ...(ca ? { caCerts: [ca] } : {}) });
+}
+async function registrar(db: Db, l: { org_id: string; cnpj: string; servico?: string; acao: string; status?: string; mensagem?: string; novos?: number; origem: string }) {
+  try { await db.from('fiscal_log').insert({ ...l, mensagem: String(l.mensagem ?? '').slice(0, 500) }) } catch (_) { /* o histórico nunca derruba a consulta */ }
+}
+async function consultarLog(db: Db, client: unknown, o: Parameters<typeof consultar>[2], origem: string) {
+  try {
+    const r = await consultar(db, client, o);
+    await registrar(db, { org_id: o.org_id, cnpj: o.cnpj, servico: o.servico, acao: 'buscar', status: r.status, mensagem: r.msg, novos: r.novos, origem });
+    return r;
+  } catch (e) {
+    await registrar(db, { org_id: o.org_id, cnpj: o.cnpj, servico: o.servico, acao: 'buscar', status: 'erro', mensagem: (e as Error).message, novos: 0, origem });
+    throw e;
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
@@ -35,14 +61,20 @@ Deno.serve(async (req) => {
     if (corpo.acao === 'agendada') {
       const segredo = Deno.env.get('CRON_SECRET');
       if (!segredo || req.headers.get('x-cron-secret') !== segredo) return json({ erro: 'Não autorizado.' }, 401);
-      const c = abrirCliente();
-      if (!c) return json({ erro: SEM_CERT }, 412);
       const { data: cfgs } = await db.from('fiscal_config').select('*').eq('ativo', true);
       const resumo: Record<string, unknown> = {};
       for (const cfg of cfgs ?? []) {
+        let cred: Cred | null = null;
+        try { cred = await credenciais(db, cfg.org_id, cfg.cnpj) } catch (e) { resumo[cfg.cnpj] = { erro: (e as Error).message } }
+        if (!cred) {
+          if (!resumo[cfg.cnpj]) resumo[cfg.cnpj] = { erro: SEM_CERT };
+          await registrar(db, { org_id: cfg.org_id, cnpj: cfg.cnpj, acao: 'buscar', status: 'erro', mensagem: String((resumo[cfg.cnpj] as { erro: string }).erro), origem: 'agendada' });
+          continue;
+        }
+        const client = abrirCliente(cred);
         for (const servico of ['nfe', 'nfse'] as const) {
           try {
-            resumo[cfg.cnpj + ':' + servico] = await consultar(db, c.client, { org_id: cfg.org_id, cnpj: cfg.cnpj, servico, ambiente: cfg.ambiente, uf_codigo: cfg.uf_codigo });
+            resumo[cfg.cnpj + ':' + servico] = await consultarLog(db, client, { org_id: cfg.org_id, cnpj: cfg.cnpj, servico, ambiente: cfg.ambiente, uf_codigo: cfg.uf_codigo }, 'agendada');
           } catch (e) { resumo[cfg.cnpj + ':' + servico] = { erro: (e as Error).message } }
         }
       }
@@ -59,9 +91,35 @@ Deno.serve(async (req) => {
     });
     const { data: ehMembro, error: eAuth } = await doUsuario.rpc('eh_membro', { p_org: org_id });
     if (eAuth || !ehMembro) return json({ erro: 'Sem acesso a esta empresa.' }, 403);
-    const c = abrirCliente();
-    if (!c) return json({ erro: SEM_CERT }, 412);
-    const { cert, key, client } = c;
+
+    if (acao === 'certificado_enviar' || acao === 'certificado_remover') {
+      const { data: ehAdm } = await doUsuario.rpc('eh_admin', { p_org: org_id });
+      if (!ehAdm) return json({ erro: 'Só o administrador pode enviar ou remover o certificado.' }, 403);
+      if (acao === 'certificado_remover') {
+        await db.from('fiscal_cert_segredo').delete().match({ org_id, cnpj });
+        await db.from('fiscal_cert_info').delete().match({ org_id, cnpj });
+        await registrar(db, { org_id, cnpj, acao: 'certificado', status: 'removido', mensagem: 'Certificado removido', origem: 'manual' });
+        return json({ ok: true });
+      }
+      const segredo = Deno.env.get('CERT_KEY');
+      if (!segredo || segredo.length < 16) return json({ erro: 'Defina o secret CERT_KEY (frase longa, 16+ caracteres) na função antes de enviar o certificado. Veja FISCAL.md.' }, 412);
+      const info = lerPfx(forge, String(corpo.pfx_b64 || ''), String(corpo.senha ?? ''));
+      if (new Date(info.validade + 'T23:59:59-03:00') < new Date()) return json({ erro: 'Este certificado está vencido (' + info.validade + ').' }, 400);
+      if (info.cnpjCert && info.cnpjCert.slice(0, 8) !== cnpj.slice(0, 8)) {
+        return json({ erro: 'O certificado é do CNPJ ' + info.cnpjCert + ', diferente do CNPJ desta empresa (' + cnpj + ').' }, 400);
+      }
+      const { data: u } = await doUsuario.auth.getUser();
+      const e1 = await db.from('fiscal_cert_segredo').upsert({ org_id, cnpj, cert_enc: await cifrar(segredo, info.certPem), key_enc: await cifrar(segredo, info.keyPem) });
+      if (e1.error) return json({ erro: 'Não foi possível guardar: ' + e1.error.message }, 500);
+      const meta = { org_id, cnpj, titular: info.titular, cnpj_cert: info.cnpjCert, validade: info.validade, fingerprint: info.fingerprint, enviado_em: new Date().toISOString(), enviado_por: u?.user?.id ?? null };
+      await db.from('fiscal_cert_info').upsert(meta);
+      await registrar(db, { org_id, cnpj, acao: 'certificado', status: 'enviado', mensagem: 'Certificado de ' + info.titular + ' válido até ' + info.validade, origem: 'manual' });
+      return json({ ok: true, info: { titular: info.titular, cnpj_cert: info.cnpjCert, validade: info.validade, fingerprint: info.fingerprint, enviado_em: meta.enviado_em } });
+    }
+
+    const cred = await credenciais(db, org_id, cnpj);
+    if (!cred) return json({ erro: SEM_CERT }, 412);
+    const cert = cred.cert, key = cred.key, client = abrirCliente(cred);
 
     if (acao === 'ciencia' || acao === 'manifestar') {
       const tp = acao === 'ciencia' ? 'ciencia' : tipo;
@@ -80,13 +138,14 @@ Deno.serve(async (req) => {
           const ret = lerRetEvento(await r.text());
           resultados[chave] = { ok: ret.ok, cStat: ret.cStat, msg: ret.xMotivo };
         } catch (e) { resultados[chave] = { ok: false, cStat: '', msg: (e as Error).message } }
+        await registrar(db, { org_id, cnpj, servico: 'nfe', acao: tp, status: resultados[chave].cStat || 'erro', mensagem: '…' + chave.slice(-8) + ' · ' + resultados[chave].msg, origem: 'manual' });
       }
       return json({ ciencia: resultados });
     }
 
     const saida: Record<string, Resultado> = {};
     for (const servico of ['nfe', 'nfse'].filter((s) => servicos.includes(s))) {
-      saida[servico] = await consultar(db, client, { org_id, cnpj, servico, ambiente, uf_codigo });
+      saida[servico] = await consultarLog(db, client, { org_id, cnpj, servico, ambiente, uf_codigo }, 'manual');
     }
     return json(saida);
   } catch (e) {

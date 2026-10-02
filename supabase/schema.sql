@@ -226,3 +226,50 @@ create policy fiscal_config_alt on public.fiscal_config for update to authentica
 drop policy if exists fiscal_config_exc on public.fiscal_config;
 create policy fiscal_config_exc on public.fiscal_config for delete to authenticated using (public.eh_admin(org_id));
 grant select, insert, update, delete on public.fiscal_config to authenticated;
+
+-- Histórico de consultas e manifestações feitas na Receita (a função grava; os membros leem)
+create table if not exists public.fiscal_log (
+  id          bigint generated always as identity primary key,
+  org_id      uuid not null references public.organizacoes(id) on delete cascade,
+  cnpj        text not null,
+  servico     text,
+  acao        text not null,
+  status      text,
+  mensagem    text,
+  novos       integer,
+  origem      text not null default 'manual',
+  criado_em   timestamptz not null default now()
+);
+create index if not exists fiscal_log_org_idx on public.fiscal_log(org_id, criado_em desc);
+alter table public.fiscal_log enable row level security;
+drop policy if exists fiscal_log_ler on public.fiscal_log;
+create policy fiscal_log_ler on public.fiscal_log for select to authenticated using (public.eh_membro(org_id));
+grant select on public.fiscal_log to authenticated;
+
+-- Certificado digital A1 enviado pelo cadastro da empresa.
+-- fiscal_cert_info: só dados de identificação (os membros leem). fiscal_cert_segredo: PEMs cifrados,
+-- SEM nenhuma regra de acesso — só a Edge Function (chave de serviço) lê e grava.
+create table if not exists public.fiscal_cert_info (
+  org_id       uuid not null references public.organizacoes(id) on delete cascade,
+  cnpj         text not null,
+  titular      text,
+  cnpj_cert    text,
+  validade     date,
+  fingerprint  text,
+  enviado_em   timestamptz not null default now(),
+  enviado_por  uuid,
+  primary key (org_id, cnpj)
+);
+create table if not exists public.fiscal_cert_segredo (
+  org_id    uuid not null references public.organizacoes(id) on delete cascade,
+  cnpj      text not null,
+  cert_enc  text not null,
+  key_enc   text not null,
+  primary key (org_id, cnpj)
+);
+alter table public.fiscal_cert_info enable row level security;
+alter table public.fiscal_cert_segredo enable row level security;
+revoke all on public.fiscal_cert_segredo from anon, authenticated;
+drop policy if exists fiscal_cert_info_ler on public.fiscal_cert_info;
+create policy fiscal_cert_info_ler on public.fiscal_cert_info for select to authenticated using (public.eh_membro(org_id));
+grant select on public.fiscal_cert_info to authenticated;
