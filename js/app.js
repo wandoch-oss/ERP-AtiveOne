@@ -575,7 +575,7 @@ let route='painel';
 function go(k){route=k;if(k==='cadastros')cadTab='empresas';document.getElementById('side').classList.remove('open');render();window.scrollTo(0,0)}
 function drawNav(){
   const el=document.getElementById('side');
-  let h='<div class="brand" title="Ative One"><img src="assets/logo-app.png" alt="Ative One"><span class="brand-one">ONE</span></div>';
+  let h='<div class="brand" title="Ative Hub"><img src="assets/logo-app.png" alt="Ative Hub"><span class="brand-one">HUB</span></div>';
   NAV.forEach(g=>{
     if(g.g)h+='<div class="ng">'+g.g+'</div>';
     g.i.forEach(it=>{
@@ -2972,7 +2972,7 @@ R.cadastros=v=>{
     f.text().then(async t=>{
       let d;try{d=JSON.parse(t)}catch(x){toast('Arquivo inválido');return}
       const cs=COLS.filter(c=>Array.isArray(d[c]));
-      if(!cs.length){toast('Nenhum dado do Ative One nesse arquivo');return}
+      if(!cs.length){toast('Nenhum dado do Ative Hub nesse arquivo');return}
       const n=cs.reduce((a,c)=>a+d[c].length,0);
       if(!await ask('Substituir os dados atuais por '+n+' registros do backup?'))return;
       cs.forEach(c=>{S[c]=d[c];save(c)});toast(n+' registros importados');render();
@@ -3282,14 +3282,14 @@ async function bootFirebase(cfg){
   firebase.initializeApp(cfg);
   FB=firebase.firestore();MODE='firebase';
   const st=document.getElementById('stat');st.style.cursor='pointer';
-  st.onclick=async()=>{if(firebase.auth().currentUser&&await ask('Sair do Ative One?'))firebase.auth().signOut()};
+  st.onclick=async()=>{if(firebase.auth().currentUser&&await ask('Sair do Ative Hub?'))firebase.auth().signOut()};
   firebase.auth().onAuthStateChanged(u=>u?iniciarSessao(u):telaLogin());
 }
 function telaLogin(){
   fbSubs.forEach(f=>f());fbSubs=[];COLS.forEach(c=>S[c]=[]);
   document.getElementById('side').style.display='none';
   document.getElementById('burger').style.display='none';
-  document.getElementById('stat').textContent='Ative One';
+  document.getElementById('stat').textContent='Ative Hub';
   document.getElementById('ttl').textContent='Entrar';
   document.getElementById('sub').textContent='Acesso restrito à equipe';
   document.getElementById('view').innerHTML='<div class="card" style="max-width:380px;margin:40px auto"><div class="cbody">'+

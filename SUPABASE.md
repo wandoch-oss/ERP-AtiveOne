@@ -1,4 +1,4 @@
-# Colocar o Ative One no Supabase
+# Colocar o Ative Hub no Supabase
 
 O sistema continua sendo só arquivos estáticos (HTML, CSS e JS). O Supabase guarda os
 dados, o login e os arquivos anexados. O site fica num serviço de páginas estáticas

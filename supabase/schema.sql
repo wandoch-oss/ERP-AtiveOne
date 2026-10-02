@@ -1,5 +1,5 @@
 -- =====================================================================
--- Ative One · estrutura do banco no Supabase
+-- Ative Hub · estrutura do banco no Supabase
 -- Cole este arquivo inteiro no SQL Editor do Supabase e clique em Run.
 -- Pode ser executado de novo sem perder dados (usa IF NOT EXISTS).
 --

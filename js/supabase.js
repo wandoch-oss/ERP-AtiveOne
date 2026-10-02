@@ -14,7 +14,7 @@ async function bootSupabase(){
   SB=window.supabase.createClient(sbCfg().supabaseUrl,sbCfg().supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true}});
   MODE='supabase';
   st.style.cursor='pointer';
-  st.onclick=async()=>{if(SB_USER&&await ask('Sair do Ative One?','Sair'))await SB.auth.signOut()};
+  st.onclick=async()=>{if(SB_USER&&await ask('Sair do Ative Hub?','Sair'))await SB.auth.signOut()};
   SB.auth.onAuthStateChange((ev,sess)=>{
     if(ev==='SIGNED_OUT')sbTelaLogin();
     else if(sess&&sess.user&&(!SB_USER||SB_USER.id!==sess.user.id))sbIniciar(sess.user);
@@ -40,7 +40,7 @@ function sbTela(titulo,sub,html){
 }
 function sbTelaLogin(msg){
   sbLimpar();
-  document.getElementById('stat').textContent='Ative One';
+  document.getElementById('stat').textContent='Ative Hub';
   sbTela('Entrar','Acesso restrito à equipe',
     '<label class="f"><span>E-mail</span><input type="text" id="lgE" autocomplete="username" inputmode="email"></label>'+
     '<label class="f"><span>Senha</span><input type="password" id="lgS" autocomplete="current-password" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2)"></label>'+
