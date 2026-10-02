@@ -1,7 +1,7 @@
 /* ---------- estado e persistência ---------- */
 const COLS=['clientes','oportunidades','orcamentos','obras','os','agenda','contratos','apontamentos',
 'produtos','servicos','categorias_servico','locais','estoque','compras','fornecedores','financeiro','nfe','campanhas',
-'concorrentes','contas_bancarias','extrato','colaboradores','parceiros','plano_contas','plano_gerencial','ajustes','reservas','aditivos','familias','categorias','vendas','canais','empresas','centros_lucro','centros_custo','usuarios'];
+'concorrentes','contas_bancarias','extrato','colaboradores','parceiros','plano_contas','plano_gerencial','ajustes','reservas','aditivos','familias','categorias','vendas','canais','empresas','centros_lucro','centros_custo','usuarios','preferencias'];
 const S={}; COLS.forEach(c=>S[c]=[]);
 let DB=null, DL=null, FB=null, ASSETS=null, MODE='local', pend={};
 
@@ -572,14 +572,26 @@ const SUB={painel:'Visão geral da operação',clientes:'Base, histórico e rent
  dre_contabil:'Resultado contábil a partir do plano gerencial vinculado',fluxo:'Projeção unificada de entradas e saídas',dre:'Resultado gerencial por vertical',
  cadastros:'Empresas, financeiro, produtos, serviços, pessoas e compras',acessos:'Perfis e usuários do sistema'};
 let route='painel';
-let NAV_FECH=[];try{NAV_FECH=JSON.parse(localStorage.getItem('ao-nav-fech')||'[]')}catch(e){}
+/* preferências de tela por usuário: gravadas com os dados do sistema (sobrevivem a fechar e abrir) e copiadas no navegador */
+const prefId=()=>MODE==='supabase'&&typeof SB_USER!=='undefined'&&SB_USER?SB_USER.id:'eu';
+function prefGet(k,def){
+  const p=byId('preferencias',prefId());if(p&&p[k]!==undefined)return p[k];
+  try{const v=localStorage.getItem('ao-pref-'+k);if(v!=null)return JSON.parse(v)}catch(e){}
+  return def;
+}
+function prefSet(k,v){
+  const p=Object.assign({},byId('preferencias',prefId())||{id:prefId()});p[k]=v;put('preferencias',p);
+  try{localStorage.setItem('ao-pref-'+k,JSON.stringify(v))}catch(e){}
+}
+const navFech=()=>{const v=prefGet('nav_fech',null);if(Array.isArray(v))return v;try{return JSON.parse(localStorage.getItem('ao-nav-fech')||'[]')}catch(e){return []}};
 function go(k){route=k;if(k==='cadastros')cadTab='empresas';document.getElementById('side').classList.remove('open');render();window.scrollTo(0,0)}
 function drawNav(){
   const el=document.getElementById('side');
   let h='<div class="brand" title="Ative Hub"><img src="assets/logo-app.png" alt="Ative Hub"><span class="brand-one">HUB</span></div>';
+  const NF=navFech();
   NAV.forEach(g=>{
     const its=g.i.filter(it=>typeof podeRota!=='function'||podeRota(it[0]));if(!its.length)return;
-    const fech=g.g&&NAV_FECH.includes(g.g),temAtivo=its.some(it=>it[0]===route);
+    const fech=g.g&&NF.includes(g.g),temAtivo=its.some(it=>it[0]===route);
     if(g.g)h+='<button class="ng'+(fech?' fech':'')+(fech&&temAtivo?' ativo':'')+'" data-ng="'+esc(g.g)+'" aria-expanded="'+!fech+'"><span>'+g.g+'</span>'+ic('chev',14)+'</button>';
     if(fech)return;
     its.forEach(it=>{
@@ -592,8 +604,7 @@ function drawNav(){
   const db=document.getElementById('devbtn');if(db)db.onclick=()=>setDevice('mobile');
   el.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
   el.querySelectorAll('[data-ng]').forEach(b=>b.onclick=()=>{
-    const g=b.dataset.ng;NAV_FECH=NAV_FECH.includes(g)?NAV_FECH.filter(x=>x!==g):NAV_FECH.concat(g);
-    try{localStorage.setItem('ao-nav-fech',JSON.stringify(NAV_FECH))}catch(e){}
+    const g=b.dataset.ng,nf=navFech();prefSet('nav_fech',nf.includes(g)?nf.filter(x=>x!==g):nf.concat(g));
     const st=el.scrollTop;drawNav();el.scrollTop=st;
   });
 }
