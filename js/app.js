@@ -239,12 +239,12 @@ function readForm(){
 function tbl(cols,rows,opts){
   opts=opts||{};
   if(!rows.length)return '<div class="empty">'+(opts.empty||'Nenhum registro ainda.')+'</div>';
-  let h='<div class="scr"><table><thead><tr>'+cols.map(c=>'<th'+(c.n?' class="n"':'')+'>'+esc(c.l)+'</th>').join('')+
+  let h='<div class="scr"><table class="tl"><thead><tr>'+cols.map(c=>'<th'+(c.n?' class="n"':'')+'>'+esc(c.l)+'</th>').join('')+
     (opts.acts?'<th></th>':'')+'</tr></thead><tbody>';
   rows.forEach(r=>{
     h+='<tr'+(opts.onRow?' class="clk" data-id="'+r.id+'"':'')+'>'+
-      cols.map(c=>'<td class="'+(c.n?'n ':'')+(c.s?'s':'')+'">'+(c.f?c.f(r):esc(r[c.k]))+'</td>').join('')+
-      (opts.acts?'<td class="n"><button class="btn sec sm" data-ed="'+r.id+'">Editar</button></td>':'')+'</tr>';
+      cols.map(c=>'<td data-l="'+esc(c.l)+'" class="'+(c.n?'n ':'')+(c.s?'s':'')+'">'+(c.f?c.f(r):esc(r[c.k]))+'</td>').join('')+
+      (opts.acts?'<td class="n" data-l=""><button class="btn sec sm" data-ed="'+r.id+'">Editar</button></td>':'')+'</tr>';
   });
   h+='</tbody>'+(opts.foot||'')+'</table></div>';
   return h;
@@ -582,8 +582,9 @@ function drawNav(){
       h+='<button class="nav'+(route===it[0]?' on':'')+'" data-go="'+it[0]+'"><span class="ni">'+ic(NAV_IC[it[0]]||'dashboard',17)+'</span><span class="nt">'+it[1]+'</span>'+(alert?'<b>'+alert+'</b>':'')+'</button>';
     });
   });
-  h+='<div class="sfoot">Dados salvos automaticamente.<br>Vertical: residencial · predial · corporativo</div>';
+  h+='<div class="sfoot">Dados salvos automaticamente.<br>Vertical: residencial · predial · corporativo<br><button class="btn sec sm" id="devbtn" style="margin-top:8px">Ver versão celular</button></div>';
   el.innerHTML=h;
+  const db=document.getElementById('devbtn');if(db)db.onclick=()=>setDevice('mobile');
   el.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
 }
 function navBadge(k){
@@ -606,6 +607,7 @@ function drawUnid(){
   el.onchange=()=>{UNID=el.value;try{localStorage.setItem('ative:unid',UNID)}catch(e){}render()};
 }
 function render(){
+  if(typeof aplicarModoCelular==='function')aplicarModoCelular();
   drawUnid();
   drawNav();
   const tit=(NAV.flatMap(g=>g.i).find(i=>i[0]===route)||[,'Painel'])[1];
@@ -614,6 +616,7 @@ function render(){
   const v=document.getElementById('view');
   v.innerHTML='';
   (R[route]||R.painel)(v);
+  if(typeof desenharCelular==='function')desenharCelular();
 }
 document.getElementById('burger').onclick=()=>document.getElementById('side').classList.toggle('open');
 /* ---------- regras calculadas ---------- */
@@ -693,6 +696,7 @@ function chartBars(el,series,labels,colors){
 /* ---------- telas ---------- */
 const R={};
 R.painel=v=>{
+  if(typeof isMobile==='function'&&isMobile()){painelMobile(v);return}
   const mes=mesDe(hoje());
   const recMes=U('financeiro').filter(l=>l.tipo==='Receber'&&mesDe(l.vencimento)===mes).reduce((a,l)=>a+Number(l.valor||0),0);
   const pagMes=U('financeiro').filter(l=>l.tipo==='Pagar'&&mesDe(l.vencimento)===mes).reduce((a,l)=>a+Number(l.valor||0),0);

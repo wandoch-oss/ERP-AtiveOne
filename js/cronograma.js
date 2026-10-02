@@ -56,7 +56,7 @@ function ganttObras(rows){
   });
   const sem=rows.length-linhas.length;
   return ganttHtml(linhas,{largura:900})+(sem?'<div class="note">'+sem+' projeto(s) sem etapas não aparecem na linha do tempo.</div>':'')+
-    '<div class="note">Passe o mouse sobre uma etapa para ver as datas. As datas planejadas vêm do início e do fim previsto do projeto, distribuídas pelo peso de cada etapa. Ajuste cada etapa no projeto, aba Cronograma.</div>';
+    '<div class="note">Passe o mouse (ou toque) sobre uma etapa para ver as datas. As datas planejadas vêm do início e do fim previsto do projeto, distribuídas pelo peso de cada etapa. Ajuste cada etapa no projeto, aba Cronograma.</div>';
 }
 function wireGanttObras(el){el.querySelectorAll('[data-gid]').forEach(r=>r.onclick=()=>abrirObra(r.dataset.gid))}
 
