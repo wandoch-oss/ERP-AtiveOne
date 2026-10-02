@@ -89,7 +89,7 @@ R.acessos=v=>{
   const el=document.getElementById('lst');
   el.innerHTML=tbl([{l:'Nome',s:1,f:r=>esc(r.nome||'')},{l:'E-mail',f:r=>esc(r.email||'')},
     {l:'Perfil',f:r=>PERFIS[r.perfil]?'<span class="bg '+PERFIS[r.perfil].cor+'">'+esc(r.perfil)+'</span>':'—'},
-    {l:'Técnico vinculado',f:r=>r.colaborador?esc(nm('colaboradores',r.colaborador)):'—'},
+    {l:'Pessoa',f:r=>r.colaborador?esc(nm('colaboradores',r.colaborador)):'—'},
     {l:'Status',f:r=>'<span class="bg '+(ativo(r)?'g-green':'g-gray')+'">'+(ativo(r)?'Ativo':'Inativo')+'</span>'}],
     us,{acts:1,empty:'Nenhum acesso cadastrado ainda.'+(MODE==='supabase'?' Você entra como administrador por ter criado a empresa.':'')});
   el.querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>editarAcesso(b.dataset.ed));
@@ -104,18 +104,21 @@ R.acessos=v=>{
 function editarAcesso(id){
   const rec=id?byId('usuarios',id):{perfil:'Comercial',status:'Ativo'};
   const souEu=MODE==='supabase'&&SB_USER&&id&&normEmail(rec.email)===normEmail(SB_USER.email);
-  const F=[{k:'nome',l:'Nome',req:1},{k:'email',l:'E-mail de login',req:1},
+  const F=[{k:'colaborador',l:'Pessoa (Cadastros → Pessoas)',t:'ref',col:'colaboradores',full:1,filtro:c=>ativo(c),rotulo:c=>c.nome+(c.tipo?' · '+c.tipo:'')},
+    {k:'nome',l:'Nome',req:1},{k:'email',l:'E-mail de login',req:1},
     {k:'perfil',l:'Perfil',t:'select',opts:NOMES_PERFIS,req:1},
-    {k:'colaborador',l:'Técnico vinculado (obrigatório no perfil Técnico)',t:'ref',col:'colaboradores',filtro:ehTecnico},
     {k:'status',l:'Status',t:'select',opts:['Ativo','Inativo'],req:1}];
   openM(id?'Editar acesso':'Novo acesso',formHtml(F,rec)+
     '<div class="note" id="acD">'+esc((PERFIS[rec.perfil]||{}).d||'')+'</div>'+
+    '<div class="note">Escolha a pessoa para puxar nome e e-mail do cadastro. No perfil Técnico, a pessoa precisa estar cadastrada como Técnico: é por ela que o sistema mostra só as OS dele.</div>'+
     (id&&!souEu?'<div style="margin-top:6px"><button class="btn dgr sm" id="mDel">Excluir acesso</button></div>':''),'Salvar',async d=>{
     d.email=normEmail(d.email);
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email)){toast('E-mail inválido.');return}
     if(S.usuarios.some(u=>u.id!==id&&normEmail(u.email)===d.email)){toast('Já existe um acesso com esse e-mail.');return}
-    if(d.perfil==='Técnico'&&!d.colaborador){toast('Escolha o técnico vinculado: é por ele que o sistema mostra só as OS dessa pessoa.');return}
-    if(d.perfil!=='Técnico')d.colaborador='';
+    const pes=d.colaborador?byId('colaboradores',d.colaborador):null;
+    if(d.perfil==='Técnico'&&!pes){toast('No perfil Técnico, escolha a pessoa: é por ela que o sistema mostra só as OS dele.');return}
+    if(d.perfil==='Técnico'&&!ehTecnico(pes)){toast(pes.nome+' não está cadastrado(a) como Técnico em Pessoas.');return}
+    if(d.colaborador&&S.usuarios.some(u=>u.id!==id&&u.colaborador===d.colaborador)){toast(pes.nome+' já tem um acesso cadastrado.');return}
     const virouEu=MODE==='supabase'&&SB_USER&&d.email===normEmail(SB_USER.email);
     if((souEu||virouEu)&&(d.perfil!=='Administrador'||d.status!=='Ativo')){toast('Você não pode tirar o seu próprio acesso de administrador.');return}
     if(MODE==='supabase'){
@@ -126,10 +129,19 @@ function editarAcesso(id){
       if(m)m.disabled=false;
       if(r.error){toast(r.error.message);return}
     }
-    put('usuarios',Object.assign({},id?rec:{},d));toast('Acesso salvo');closeM();render();
+    put('usuarios',Object.assign({},id?rec:{},d));
+    if(pes&&!pes.email){pes.email=d.email;put('colaboradores',pes)}   // completa o e-mail no cadastro da pessoa
+    toast('Acesso salvo');closeM();render();
   });
   const sel=document.getElementById('f_perfil'),dsc=document.getElementById('acD');
   if(sel)sel.onchange=()=>{dsc.textContent=(PERFIS[sel.value]||{}).d||''};
+  const ps=document.getElementById('f_colaborador');
+  if(ps)ps.onchange=()=>{
+    const c=byId('colaboradores',ps.value);if(!c)return;
+    document.getElementById('f_nome').value=c.nome||'';
+    if(c.email)document.getElementById('f_email').value=c.email;
+    if(!id&&ehTecnico(c)&&sel){sel.value='Técnico';sel.onchange()}
+  };
   const b=document.getElementById('mDel');
   if(b)b.onclick=async()=>{
     if(!await ask('Excluir o acesso de '+(rec.nome||rec.email)+'? A pessoa deixa de entrar no sistema.','Excluir'))return;
