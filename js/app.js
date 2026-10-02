@@ -572,13 +572,16 @@ const SUB={painel:'Visão geral da operação',clientes:'Base, histórico e rent
  dre_contabil:'Resultado contábil a partir do plano gerencial vinculado',fluxo:'Projeção unificada de entradas e saídas',dre:'Resultado gerencial por vertical',
  cadastros:'Empresas, financeiro, produtos, serviços, pessoas e compras',acessos:'Perfis e usuários do sistema'};
 let route='painel';
+let NAV_FECH=[];try{NAV_FECH=JSON.parse(localStorage.getItem('ao-nav-fech')||'[]')}catch(e){}
 function go(k){route=k;if(k==='cadastros')cadTab='empresas';document.getElementById('side').classList.remove('open');render();window.scrollTo(0,0)}
 function drawNav(){
   const el=document.getElementById('side');
   let h='<div class="brand" title="Ative Hub"><img src="assets/logo-app.png" alt="Ative Hub"><span class="brand-one">HUB</span></div>';
   NAV.forEach(g=>{
     const its=g.i.filter(it=>typeof podeRota!=='function'||podeRota(it[0]));if(!its.length)return;
-    if(g.g)h+='<div class="ng">'+g.g+'</div>';
+    const fech=g.g&&NAV_FECH.includes(g.g),temAtivo=its.some(it=>it[0]===route);
+    if(g.g)h+='<button class="ng'+(fech?' fech':'')+(fech&&temAtivo?' ativo':'')+'" data-ng="'+esc(g.g)+'" aria-expanded="'+!fech+'"><span>'+g.g+'</span>'+ic('chev',14)+'</button>';
+    if(fech)return;
     its.forEach(it=>{
       const alert=navBadge(it[0]);
       h+='<button class="nav'+(route===it[0]?' on':'')+'" data-go="'+it[0]+'"><span class="ni">'+ic(NAV_IC[it[0]]||'dashboard',17)+'</span><span class="nt">'+it[1]+'</span>'+(alert?'<b>'+alert+'</b>':'')+'</button>';
@@ -588,6 +591,11 @@ function drawNav(){
   el.innerHTML=h;
   const db=document.getElementById('devbtn');if(db)db.onclick=()=>setDevice('mobile');
   el.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
+  el.querySelectorAll('[data-ng]').forEach(b=>b.onclick=()=>{
+    const g=b.dataset.ng;NAV_FECH=NAV_FECH.includes(g)?NAV_FECH.filter(x=>x!==g):NAV_FECH.concat(g);
+    try{localStorage.setItem('ao-nav-fech',JSON.stringify(NAV_FECH))}catch(e){}
+    const st=el.scrollTop;drawNav();el.scrollTop=st;
+  });
 }
 function navBadge(k){
   if(k==='financeiro')return contasVencidas().length||0;
